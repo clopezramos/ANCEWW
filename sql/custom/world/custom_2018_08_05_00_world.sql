@@ -214,3 +214,20 @@ INSERT INTO `npc_text` (`ID`, `text0_0`, `text0_1`, `BroadcastTextID0`, `lang0`,
 (@ENTRY+03, '$BSe ve que la fuerza de esos dos nos ha desviado.',                                          '',0,0,1,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0),
 (@ENTRY+04, '$BCreo que estamos por fin en el lugar correcto.',                                            '',0,0,1,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0),
 (@ENTRY+05, '$B¿Tú que haces aquí?$B$B¿No deberías estar dándote de tortas con el resto?',                 '',0,0,1,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0,'','',0,0,0,0,0,0,0,0);
+
+-- gossip_menu_option
+DELETE FROM `gossip_menu_option` WHERE `MenuID`=10140 and`OptionID`=0;
+INSERT INTO `gossip_menu_option` (`MenuID`, `OptionID`, `OptionIcon`, `OptionText`, `OptionType`, `OptionNpcFlag`) VALUES
+(10140, 0, 9, '¡TENEMOS SED DE SANGRE!', 1, 1);
+
+DELETE FROM `gossip_menu_option` WHERE `MenuID` BETWEEN @ENTRY+00 AND @ENTRY+05;
+INSERT INTO `gossip_menu_option` (`MenuID`, `OptionID`, `OptionIcon`, `OptionText`, `OptionBroadcastTextID`, `OptionType`, `OptionNpcFlag`, `ActionMenuID`, `ActionPoiID`, `BoxCoded`, `BoxMoney`, `BoxText`) VALUES
+(@ENTRY+00, 0, 0, '¡SIUUUUUUUUUUUUUUUUUUUU!',                                                          0, 1, 1, 0, 0, 0, 0, ''),
+(@ENTRY+00, 1, 0, 'A Messi le han perdonado',                                                          0, 1, 1, 0, 0, 0, 0, ''),
+(@ENTRY+01, 0, 0, 'Ermmm... Creo que este no es Manacapón.',                                           0, 1, 1, 0, 0, 0, 0, ''),
+(@ENTRY+01, 1, 0, 'Tu sabes de magia lo que yo de arameo. Esto es muy peligroso, ¡sácame de aquí ya!', 0, 1, 1, 0, 0, 0, 0, ''),
+(@ENTRY+02, 0, 0, 'Cucha... No había que matar a un gnomo... ¿O algo?',                                0, 1, 1, 0, 0, 0, 0, ''),
+(@ENTRY+03, 0, 0, 'Vámonos de aquí antes de que se lien a hostias.',                                   0, 1, 1, 0, 0, 0, 0, ''),
+(@ENTRY+04, 0, 9, 'Va, al lío.',                                                                       0, 1, 1, 0, 0, 0, 0, ''),
+(@ENTRY+04, 1, 0, '¿Esto qué es? Sácame de aquí t.t',                                                  0, 1, 1, 0, 0, 0, 0, ''),
+(@ENTRY+05, 0, 0, 'Nah, que me he liado.',                                                             0, 1, 1, 0, 0, 0, 0, '');
