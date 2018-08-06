@@ -200,7 +200,7 @@ INSERT INTO `creature_text` (`CreatureID`, `GroupID`, `ID`, `Text`, `Type`, `Lan
 (@ENTRY+11, 0, 2, '¡Arrodillaos ante vuestro verdadero Rey!', 14, 0, 100, 5, 0, 0, 0, 0, 'Manabonk Escape - Caballero de la muerte - SAY_DK_0_2'),
 -- Campeón Illidari
 (@ENTRY+12, 0, 0, '¡Nuestro señor os dará justicia!',               14, 0, 100, 5, 0, 0, 0, 0, 'Manabonk Escape - Campeón Illidari - SAY_ILLIDARI_0_0'),
-(@ENTRY+12, 0, 1, '¡Nadie escapa de la ira del maestro!',                         14, 0, 100, 5, 0, 0, 0, 0, 'Manabonk Escape - Campeón Illidari - SAY_ILLIDARI_0_1'),
+(@ENTRY+12, 0, 1, '¡Nadie escapa de la ira del maestro!',           14, 0, 100, 5, 0, 0, 0, 0, 'Manabonk Escape - Campeón Illidari - SAY_ILLIDARI_0_1'),
 (@ENTRY+12, 0, 2, 'Infames criaturas... ¡Vuestra hora ha llegado!', 14, 0, 100, 5, 0, 0, 0, 0, 'Manabonk Escape - Campeón Illidari - SAY_ILLIDARI_0_2'),
 -- Rhonin (trigger)
 (@ENTRY+16, 0, 0, 'Una pequeña ayuda... pero tampoco os acostumbréis ;)', 15, 0, 100, 0, 0, 0, 0, 0, 'Manabonk Escape - Rhonin (trigger) - SAY_RESURRECT_0');
