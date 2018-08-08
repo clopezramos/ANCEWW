@@ -20,6 +20,7 @@
 #define _OBJECT_H
 
 #include "Common.h"
+#include "CustomUtilities.h"
 #include "Duration.h"
 #include "EventProcessor.h"
 #include "GridReference.h"
@@ -220,6 +221,9 @@ class TC_GAME_API Object
         bool PrintIndexError(uint32 index, bool set) const;
         Object(Object const& right) = delete;
         Object& operator=(Object const& right) = delete;
+
+        // custom data storage
+        DataMap _customData;
 };
 
 template<class T>
