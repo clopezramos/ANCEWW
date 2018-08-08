@@ -72,6 +72,62 @@ enum MinigobEscapeMisc
     EVENT_REMOVE_TARGETS_INMUNE_AURAS,
 };
 
+class RandomLocationPlayerSearcher
+{
+    public:
+        RandomLocationPlayerSearcher(Unit const* source, float range) : _source(source), _range(range) { }
+
+        bool operator()(Player* player)
+        {
+            if (player->IsGameMaster())
+                return false;
+
+            if (player->IsInMap(_source) && player->IsWithinDist(_source, _range) && player->GetQuestStatus(QUEST_MINIGOB_ESCAPE) == QUEST_STATUS_INCOMPLETE && !player->InSamePhase(_source))
+                return true;
+
+            return false;
+        }
+
+    private:
+        Unit const* _source;
+        float _range;
+};
+
+struct npc_minigob_escape_trigger : public ScriptedAI
+{
+    npc_minigob_escape_trigger(Creature* creature) : ScriptedAI(creature)
+    {
+    }
+
+    void Reset() override
+    {
+        _events.ScheduleEvent(EVENT_SEARCH_TARGETS, Milliseconds(1));
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        _events.Update(diff);
+
+        if (_events.ExecuteEvent() == EVENT_SEARCH_TARGETS)
+        {
+            std::list<Player*> players;
+            RandomLocationPlayerSearcher check(me, searchDistance);
+            Trinity::PlayerListSearcher<RandomLocationPlayerSearcher> searcher(me, players, check);
+            Cell::VisitWorldObjects(me, searcher, searchDistance);
+
+            for (Player* playerfound : players)
+                playerfound->SetPhaseMask(2, true);
+
+            _events.Repeat(Seconds(1));
+        }
+    }
+
+private:
+    float const searchDistance = 50.0f;
+
+    EventMap _events;
+};
+
 static uint32 const MechanicImmunityList = (1 << MECHANIC_SHIELD) | (1 << MECHANIC_INVULNERABILITY) | (1 << MECHANIC_IMMUNE_SHIELD);
 static std::list<AuraType> const AuraImmunityList =
 {
@@ -330,7 +386,6 @@ class spell_minigob_escape_teleport_random : public SpellScript
         if (target->IsGameMaster())
         {
             target->TeleportTo(randomTeleport[urand(0, 2)]);
-            //target->SetPhaseMask(2, true);
             return;
         }
 
@@ -352,13 +407,8 @@ class spell_minigob_escape_teleport_random : public SpellScript
         for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
         {
             if (Player* member = itr->GetSource())
-            {
                 if (member->IsAlive() && member->IsWithinDistInMap(GetCaster(), GetSpellInfo()->GetMaxRange()))
-                {
                     member->TeleportTo(randomTeleport[urand(0, 2)]);
-                    //member->SetPhaseMask(2, true);
-                }
-            }
         }
     }
 
@@ -437,6 +487,7 @@ class condition_minigob_event_alone : public ConditionScript
 
 void AddDalaranEventScripts()
 {
+    RegisterCreatureAI(npc_minigob_escape_trigger);
     RegisterCreatureAI(npc_minigob_escape_robot);
 
     RegisterSpellScript(spell_minigob_escape_teleport_random);
