@@ -16,28 +16,290 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "CellImpl.h"
 #include "Common.h"
 #include "ConditionMgr.h"
+#include "Containers.h"
+#include "Creature.h"
+#include "CreatureAI.h"
+#include "Duration.h"
+#include "EventMap.h"
+#include "GridNotifiersImpl.h"
 #include "Group.h"
 #include "GroupReference.h"
 #include "Object.h"
+#include "ObjectAccessor.h"
+#include "ObjectGuid.h"
 #include "Player.h"
 #include "Position.h"
 #include "QuestDef.h"
 #include "Random.h"
+#include "ScriptedCreature.h"
 #include "ScriptMgr.h"
+#include "SharedDefines.h"
+#include "SpellAuraDefines.h"
 #include "SpellInfo.h"
 #include "SpellScript.h"
 #include "Unit.h"
+#include "UnitAI.h"
+#include <functional>
+#include <list>
+#include <vector>
 
 enum MinigobEscapeMisc
 {
     QUEST_MINIGOB_ESCAPE = 30000,
 
     NPC_RHONIN_ORIGINAL = 16128,
+
+    // Robot
+    SAY_ESCAPE_DETECT_0_0 = 0,
+    SAY_ESCAPE_DETECT_0_1 = 1,
+    SAY_ESCAPE_RESET_0 = 2,
+    SAY_ESCAPE_TERMINATED_0 = 3,
+    SAY_ESCAPE_REMOVE_0 = 4,
+
+    // Robot
+    SPELL_LASER_BARRAGE = 64766,
+    SPELL_LASER_BARRAGE_TRIGGER = 64769,
+    SPELL_MAGNETIC_FIELD = 64668,
+
+    // Robot
+    EVENT_ENGAGE_COMBAT = 1,
+    EVENT_SEARCH_TARGETS,
+    EVENT_ROOT_TARGETS,
+    EVENT_LASER_BARRAGE,
+    EVENT_REMOVE_TARGETS_INMUNE_AURAS,
 };
 
-WorldLocation static const randomTeleport[] =
+static uint32 const MechanicImmunityList = (1 << MECHANIC_SHIELD) | (1 << MECHANIC_INVULNERABILITY) | (1 << MECHANIC_IMMUNE_SHIELD);
+static std::list<AuraType> const AuraImmunityList =
+{
+    SPELL_AURA_MOD_STEALTH,
+    SPELL_AURA_MOD_INVISIBILITY,
+    SPELL_AURA_SCHOOL_IMMUNITY,
+    SPELL_AURA_DEFLECT_SPELLS,
+    SPELL_AURA_MANA_SHIELD,
+    SPELL_AURA_SCHOOL_ABSORB,
+    SPELL_AURA_MOD_IMMUNE_AURA_APPLY_SCHOOL
+};
+
+class RobotTargetSearcher
+{
+    public:
+        RobotTargetSearcher(Unit const* source, float range) : _source(source), _range(range) { }
+
+        bool operator()(Unit* unit)
+        {
+            if (unit == _source)
+                return false;
+
+            if (unit->ToPlayer() && unit->ToPlayer()->IsGameMaster())
+                return false;
+
+            if (unit->IsAlive() && !_source->IsFriendlyTo(unit) && unit->IsInMap(_source) && unit->IsWithinDist(_source, _range))
+                return true;
+
+            return false;
+        }
+
+    private:
+        Unit const* _source;
+        float _range;
+};
+
+struct npc_minigob_escape_robot : public ScriptedAI
+{
+    npc_minigob_escape_robot(Creature* creature) : ScriptedAI(creature)
+    {
+        creature->setActive(true);
+        creature->SetFarVisible(true);
+    }
+
+    void Reset() override
+    {
+        _events.Reset();
+        _events.ScheduleEvent(EVENT_SEARCH_TARGETS, Milliseconds(1));
+    }
+
+    void MoveInLineOfSight(Unit* /*who*/) override
+    {
+    }
+
+    void AttackStart(Unit* who) override
+    {
+        if (!who || me->IsInCombatWith(who))
+            return;
+
+        me->Attack(who, true);
+    }
+
+    void JustEngagedWith(Unit* /*who*/) override
+    {
+        Talk(SAY_ESCAPE_DETECT_0_0);
+        _events.ScheduleEvent(EVENT_ENGAGE_COMBAT, Seconds(2));
+    }
+
+    void KilledUnit(Unit* victim) override
+    {
+        if (victim->GetTypeId() != TYPEID_PLAYER)
+            return;
+
+        Talk(SAY_ESCAPE_TERMINATED_0);
+    }
+
+    void EnterEvadeMode(EvadeReason /*why*/) override
+    {
+        _events.Reset();
+        if (!me->IsAlive())
+            return;
+
+        me->RemoveAurasOnEvade();
+        me->GetThreatManager().ClearAllThreat();
+        me->CombatStop(true);
+        me->LoadCreaturesAddon();
+        me->SetLootRecipient(nullptr);
+        me->ResetPlayerDamageReq();
+        me->SetLastDamagedTime(0);
+        me->SetCannotReachTarget(false);
+        me->DoNotReacquireTarget();
+        me->ModifyHealth(me->GetMaxHealth());
+
+        Talk(SAY_ESCAPE_RESET_0);
+
+        Reset();
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        _events.Update(diff);
+
+        while (uint32 eventId = _events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+                case EVENT_SEARCH_TARGETS:
+                    SearchTargets();
+                    if (!_targets.empty())
+                        EngageTargets();
+
+                    if (_targets.empty() && me->IsInCombat())
+                        EnterEvadeMode(EvadeReason::EVADE_REASON_NO_HOSTILES);
+                    else
+                        _events.Repeat(Milliseconds(1));
+                    break;
+                case EVENT_ENGAGE_COMBAT:
+                    Talk(SAY_ESCAPE_DETECT_0_1);
+                    _events.ScheduleEvent(EVENT_ROOT_TARGETS, Milliseconds(1));
+                    _events.ScheduleEvent(EVENT_LASER_BARRAGE, Seconds(4));
+                    _events.ScheduleEvent(EVENT_REMOVE_TARGETS_INMUNE_AURAS, Seconds(1));
+                    break;
+                case EVENT_ROOT_TARGETS:
+                    for (ObjectGuid targetGuid : _targets)
+                    {
+                        if (Unit* target = ObjectAccessor::GetUnit(*me, targetGuid))
+                            if (!target->HasAura(SPELL_MAGNETIC_FIELD))
+                                me->AddAura(SPELL_MAGNETIC_FIELD, target);
+                    }
+                    _events.Repeat(Milliseconds(1));
+                    break;
+                case EVENT_LASER_BARRAGE:
+                    if (ObjectGuid targetGuid = Trinity::Containers::SelectRandomContainerElement(_targets))
+                    {
+                        if (Unit* target = ObjectAccessor::GetUnit(*me, targetGuid))
+                            if (!CheckAuras(target))
+                                DoCast(target, SPELL_LASER_BARRAGE);
+                    }
+                    _events.Repeat(Seconds(1));
+                    break;
+                case EVENT_REMOVE_TARGETS_INMUNE_AURAS:
+                    for (ObjectGuid targetGuid : _targets)
+                    {
+                        if (Unit* target = ObjectAccessor::GetUnit(*me, targetGuid))
+                            if (CheckAuras(target))
+                            {
+                                RemoveAuras(target);
+                                Talk(SAY_ESCAPE_REMOVE_0, target);
+                            }
+                    }
+                    _events.Repeat(Seconds(1));
+                default:
+                    break;
+            }
+
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
+        }
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        _events.Reset();
+    }
+
+    void LeavingWorld() override
+    {
+        _events.Reset();
+    }
+
+private:
+    bool CheckAuras(Unit* target)  const
+    {
+        if (target->HasAura(31224 /*ROGUE_CLOAK_OF_SHADOWS*/) || target->HasAura(65961 /*ROGUE_CLOAK_OF_SHADOWS*/))
+            return true;
+
+        if (target->HasAuraWithMechanic(MechanicImmunityList))
+            return true;
+
+        for (AuraType type : AuraImmunityList)
+        {
+            if (target->HasAuraType(type))
+                return true;
+        }
+
+        return false;
+    }
+
+    void RemoveAuras(Unit* target)
+    {
+        if (target->HasAura(31224 /*ROGUE_CLOAK_OF_SHADOWS*/))
+            target->RemoveAura(31224);
+        if (target->HasAura(65961 /*ROGUE_CLOAK_OF_SHADOWS*/))
+            target->RemoveAura(65961);
+
+        target->RemoveAurasWithMechanic(MechanicImmunityList);
+
+        for (AuraType type : AuraImmunityList)
+            target->RemoveAurasByType(type);
+    }
+
+    void SearchTargets()
+    {
+        std::list<Unit*> targetsFound;
+        RobotTargetSearcher check(me, combatDistance);
+        Trinity::UnitListSearcher<RobotTargetSearcher> searcher(me, targetsFound, check);
+        Cell::VisitAllObjects(me, searcher, combatDistance);
+
+        _targets.clear();
+        for (Unit* foundTarget : targetsFound)
+            _targets.push_back(foundTarget->GetGUID());
+    }
+
+    void EngageTargets()
+    {
+        for (ObjectGuid targetGuid : _targets)
+        {
+            if (Unit* target = ObjectAccessor::GetUnit(*me, targetGuid))
+                AttackStart(target);
+        }
+    }
+
+    float const combatDistance = 80.0f;
+    EventMap _events;
+    GuidVector _targets;
+};
+
+static WorldLocation const randomTeleport[] =
 {
     { 1u,   Position(16220.393f, 16403.613f, -64.37996f,  6.23f) },
     { 571u, Position(5664.837f,  2013.375f,  1544.07031f, 3.58f) },
@@ -175,6 +437,8 @@ class condition_minigob_event_alone : public ConditionScript
 
 void AddDalaranEventScripts()
 {
+    RegisterCreatureAI(npc_minigob_escape_robot);
+
     RegisterSpellScript(spell_minigob_escape_teleport_random);
 
     new condition_minigob_event_alone();
