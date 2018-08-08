@@ -148,7 +148,7 @@ INSERT INTO `creature_text` (`CreatureID`, `GroupID`, `ID`, `Text`, `Type`, `Lan
 (@ENTRY+07, 1, 0, 'INICIALIZANDO SISTEMAS DEFENSIVOS',                                 41, 0, 100, 1, 0, 0, 0, 0, 'Manabonk Escape - Robot - SAY_DETECT_0_1'),
 (@ENTRY+07, 2, 0, 'Todas las amenazas han sido procesadas, iniciando modo vigilancia', 12, 0, 100, 1, 0, 0, 0, 0, 'Manabonk Escape - Robot - SAY_RESET_0'),
 (@ENTRY+07, 3, 0, 'Amenaza exterminada',                                               12, 0, 100, 1, 0, 0, 0, 0, 'Manabonk Escape - Robot - SAY_ESCAPE_TERMINATED_0'),
-(@ENTRY+07, 4, 0, "Las medidas defensivas de la amenaza '$N' han sido neutralizadas",    12, 0, 100, 1, 0, 0, 0, 0, 'Manabonk Escape - Robot - SAY_ESCAPE_REMOVE_0'),
+(@ENTRY+07, 4, 0, "Las medidas defensivas de la amenaza '$N' han sido neutralizadas",  12, 0, 100, 1, 0, 0, 0, 0, 'Manabonk Escape - Robot - SAY_ESCAPE_REMOVE_0'),
 -- Sistema de seguridad (trigger)
 (@ENTRY+18, 0, 0, 'Los protocolos de movimiento se encuentran actualmente inactivos, imposible acatar esa orden', 12, 0, 100, 1, 0, 0, 0, 0, 'Manabonk Escape - Robot (trigger) - SAY_ANSWER_0'),
 -- Cristiano Ronaldo
