@@ -16,8 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ConditionMgr.h"
 #include "Common.h"
+#include "ConditionMgr.h"
 #include "Group.h"
 #include "GroupReference.h"
 #include "Object.h"
