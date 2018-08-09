@@ -11962,6 +11962,9 @@ float Unit::MeleeSpellMissChance(Unit const* victim, WeaponAttackType attType, i
 
 void Unit::SetPhaseMask(uint32 newPhaseMask, bool update)
 {
+    if (MinigobEscapePlayerInfo* info = _customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey))
+        info->Status = MINIGOBESCAPE_PLAYERINFO_STATUS_NONE;
+
     if (newPhaseMask == GetPhaseMask())
         return;
 
