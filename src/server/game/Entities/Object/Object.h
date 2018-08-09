@@ -174,6 +174,8 @@ class TC_GAME_API Object
         DynamicObject* ToDynObject() { if (GetTypeId() == TYPEID_DYNAMICOBJECT) return reinterpret_cast<DynamicObject*>(this); else return nullptr; }
         DynamicObject const* ToDynObject() const { if (GetTypeId() == TYPEID_DYNAMICOBJECT) return reinterpret_cast<DynamicObject const*>(this); else return nullptr; }
 
+        // custom data storage
+        DataMap _customData;
     protected:
         Object();
 
@@ -221,9 +223,6 @@ class TC_GAME_API Object
         bool PrintIndexError(uint32 index, bool set) const;
         Object(Object const& right) = delete;
         Object& operator=(Object const& right) = delete;
-
-        // custom data storage
-        DataMap _customData;
 };
 
 template<class T>

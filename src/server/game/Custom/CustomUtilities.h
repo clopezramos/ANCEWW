@@ -20,7 +20,6 @@
 #define CUSTOM_UTILITIES_H
 
 #include "Common.h"
-#include "Errors.h"
 #include <string>
 #include <unordered_map>
 #include <memory>
@@ -40,18 +39,34 @@ class DataMap
         };
 
         /**
+         * Default constructs value on the given key, if value already exists, do nothing
+         */
+        template<class T>
+        bool Construct(std::string const& key)
+        {
+            static_assert(std::is_base_of<Base, T>::value, "T must derive from Base");
+
+            auto itr = _container.find(key);
+            if (itr != _container.end())
+                return false;
+
+            auto pair = _container.emplace(key, std::make_unique<T>());
+            return pair.second;
+        }
+
+        /**
          * Returns a pointer to object of requested type stored with given key or nullptr
          */
         template<class T>
-        T* Get(std::string const& k) const
+        T* Get(std::string const& key) const
         {
-            ASSERT(std::is_base_of<Base, T>::value, "T must derive from Base");
-            if (Container.empty())
+            static_assert(std::is_base_of<Base, T>::value, "T must derive from Base");
+            if (_container.empty())
                 return nullptr;
 
-            auto it = Container.find(k);
-            if (it != Container.end())
-                return dynamic_cast<T*>(it->second.get());
+            auto itr = _container.find(key);
+            if (itr != _container.end())
+                return dynamic_cast<T*>(itr->second.get());
             return nullptr;
         }
 
@@ -60,34 +75,36 @@ class DataMap
          * or default constructs one and returns that one
          */
         template<class T, typename std::enable_if<std::is_default_constructible<T>::value, int>::type = 0>
-        T* GetDefault(std::string const& k)
+        T* GetDefault(std::string const& key)
         {
-            ASSERT(std::is_base_of<Base, T>::value, "T must derive from Base");
-            if (T* v = Get<T>(k))
-                return v;
-            T* v = new T();
-            Container.emplace(k, std::unique_ptr<T>(v));
-            return v;
+            static_assert(std::is_base_of<Base, T>::value, "T must derive from Base");
+            if (T* value = Get<T>(key))
+                return value;
+
+            T* value = new T();
+            _container.emplace(std::piecewise_construct, std::forward_as_tuple(key), std::forward_as_tuple(value));
+            return value;
         }
 
         /**
          * Stores a new object that inherits the Base class with the given key
          */
-        void Set(std::string const& k, Base* v)
+        void Set(std::string const& key, Base* value)
         {
-            Container[k] = std::unique_ptr<Base>(v);
+            _container.erase(key);
+            _container.emplace(std::piecewise_construct, std::forward_as_tuple(key), std::forward_as_tuple(value));
         }
 
         /**
          * Removes objects with given key and returns true if one was removed, false otherwise
          */
-        bool Erase(std::string const& k)
+        bool Erase(std::string const& key)
         {
-            return Container.erase(k) != 0;
+            return _container.erase(key) != 0;
         }
 
     private:
-        std::unordered_map<std::string, std::unique_ptr<Base>> Container;
+        std::unordered_map<std::string, std::unique_ptr<Base>> _container;
 };
 
 #endif //CUSTOM_UTILITIES_H
