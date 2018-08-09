@@ -107,4 +107,21 @@ class DataMap
         std::unordered_map<std::string, std::unique_ptr<Base>> _container;
 };
 
+static std::string const minigobEscapeDataKey = "minigob_escape";
+
+enum MinigobEscapePlayerInfoStatus : uint32
+{
+    MINIGOBESCAPE_PLAYERINFO_STATUS_NONE = 0,
+    MINIGOBESCAPE_PLAYERINFO_STATUS_RP,
+    MINIGOBESCAPE_PLAYERINFO_STATUS_FIGHT
+};
+
+class MinigobEscapePlayerInfo : public DataMap::Base
+{
+    public:
+        MinigobEscapePlayerInfo() : Status(MINIGOBESCAPE_PLAYERINFO_STATUS_NONE) { }
+
+        uint32 Status;
+};
+
 #endif //CUSTOM_UTILITIES_H

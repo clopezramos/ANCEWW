@@ -406,6 +406,9 @@ Player::Player(WorldSession* session): Unit(true)
 
     m_achievementMgr = new AchievementMgr(this);
     m_reputationMgr = new ReputationMgr(this);
+
+    // custom storage initialization
+    _customData.Construct<MinigobEscapePlayerInfo>(minigobEscapeDataKey);
 }
 
 Player::~Player()
