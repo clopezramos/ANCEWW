@@ -1,4 +1,5 @@
 # Copyright (C) 2008-2018 TrinityCore <https://www.trinitycore.org/>
+# Copyright (C) 2018 clopezramos <https://github.com/clopezramos>
 #
 # This file is free software; as a special exception the author gives
 # unlimited permission to copy and/or distribute it, with or without
@@ -24,9 +25,9 @@ else()
   if(GIT_EXECUTABLE)
     # Create a revision-string that we can use
     execute_process(
-      COMMAND "${GIT_EXECUTABLE}" describe --long --match init --dirty=+ --abbrev=12
+      COMMAND "${GIT_EXECUTABLE}" rev-parse --short=12 HEAD
       WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-      OUTPUT_VARIABLE rev_info
+      OUTPUT_VARIABLE rev_hash
       OUTPUT_STRIP_TRAILING_WHITESPACE
       ERROR_QUIET
     )
@@ -52,7 +53,7 @@ else()
 
   # Last minute check - ensure that we have a proper revision
   # If everything above fails (means the user has erased the git revision control directory or removed the origin/HEAD tag)
-  if(NOT rev_info)
+  if(NOT rev_hash)
     # No valid ways available to find/set the revision/hash, so let's force some defaults
     message(STATUS "
     Could not find a proper repository signature (hash) - you may need to pull tags with git fetch -t
@@ -60,9 +61,6 @@ else()
     set(rev_date "1970-01-01 00:00:00 +0000")
     set(rev_hash "unknown")
     set(rev_branch "Archived")
-  else()
-    # Extract information required to build a proper versionstring
-    string(REGEX REPLACE init-|[0-9]+-g "" rev_hash ${rev_info})
   endif()
 endif()
 
