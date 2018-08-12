@@ -235,9 +235,9 @@ INSERT INTO `gossip_menu_option` (`MenuID`, `OptionID`, `OptionIcon`, `OptionTex
 -- gossip_menu
 DELETE FROM `gossip_menu` WHERE `MenuID` BETWEEN @ENTRY+00 AND @ENTRY+05;
 INSERT INTO `gossip_menu` (`MenuID`, `TextID`) VALUES
-(@ENTRY+00, ENTRY+00),
-(@ENTRY+01, ENTRY+01),
-(@ENTRY+02, ENTRY+02),
-(@ENTRY+03, ENTRY+03),
-(@ENTRY+04, ENTRY+04),
-(@ENTRY+05, ENTRY+05);
+(@ENTRY+00, @ENTRY+00),
+(@ENTRY+01, @ENTRY+01),
+(@ENTRY+02, @ENTRY+02),
+(@ENTRY+03, @ENTRY+03),
+(@ENTRY+04, @ENTRY+04),
+(@ENTRY+05, @ENTRY+05);
