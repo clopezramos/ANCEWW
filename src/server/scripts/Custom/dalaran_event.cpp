@@ -45,7 +45,7 @@
 #include "UnitAI.h"
 #include <functional>
 #include <list>
-#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 enum MinigobEscapeMisc
@@ -74,6 +74,8 @@ enum MinigobEscapeMisc
     EVENT_REMOVE_TARGETS_INMUNE_AURAS,
 };
 
+static uint32 const MinigobEscapePhase = 2;
+
 class RandomLocationPlayerSearcher
 {
     public:
@@ -84,7 +86,7 @@ class RandomLocationPlayerSearcher
             if (player->IsGameMaster())
                 return false;
 
-            if (player->IsInMap(_source) && player->IsWithinDist(_source, _range) && player->GetQuestStatus(QUEST_MINIGOB_ESCAPE) == QUEST_STATUS_INCOMPLETE && !player->InSamePhase(_source))
+            if (player->IsInMap(_source) && player->IsWithinDist(_source, _range) && player->GetQuestStatus(QUEST_MINIGOB_ESCAPE) == QUEST_STATUS_INCOMPLETE && !player->InSamePhase(MinigobEscapePhase))
             {
                 if (MinigobEscapePlayerInfo* info = player->_customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey))
                     if (info->Status == MINIGOBESCAPE_PLAYERINFO_STATUS_NONE)
@@ -118,7 +120,7 @@ struct npc_minigob_escape_trigger : public ScriptedAI
         {
             for (auto itr = _foundPlayers.begin(); itr != _foundPlayers.end();)
             {
-                Player* player = ObjectAccessor::GetPlayer(*me, itr->first);
+                Player* player = ObjectAccessor::GetPlayer(*me, *itr);
                 if (!player)
                 {
                     itr = _foundPlayers.erase(itr);
@@ -135,7 +137,7 @@ struct npc_minigob_escape_trigger : public ScriptedAI
                 if (!player->IsInMap(me) || !player->IsWithinDist(me, searchDistance) || player->GetQuestStatus(QUEST_MINIGOB_ESCAPE) != QUEST_STATUS_INCOMPLETE)
                 {
                     if (info->Status == MINIGOBESCAPE_PLAYERINFO_STATUS_RP)
-                        player->SetPhaseMask(itr->second, true);
+                        player->SetPhaseMask(player->GetPhaseMask() & ~MinigobEscapePhase, true);
 
                     itr = _foundPlayers.erase(itr);
                 }
@@ -150,13 +152,14 @@ struct npc_minigob_escape_trigger : public ScriptedAI
 
             for (Player* foundPlayer : players)
             {
-                _foundPlayers.emplace(foundPlayer->GetGUID(), foundPlayer->GetPhaseMask());
+                _foundPlayers.insert(foundPlayer->GetGUID());
 
-                foundPlayer->SetPhaseMask(me->GetPhaseMask(), true);
-
+                foundPlayer->SetPhaseMask(me->GetPhaseMask() | MinigobEscapePhase, true);
                 if (MinigobEscapePlayerInfo* info = foundPlayer->_customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey))
                     info->Status = MINIGOBESCAPE_PLAYERINFO_STATUS_RP;
             }
+
+            me->setActive(players.empty() && _foundPlayers.empty());
 
             _events.Repeat(Seconds(1));
         }
@@ -166,7 +169,7 @@ private:
     float const searchDistance = 50.0f;
 
     EventMap _events;
-    std::unordered_map<ObjectGuid, uint32 /*phaseMask*/> _foundPlayers;
+    std::unordered_set<ObjectGuid> _foundPlayers;
 };
 
 static uint32 const MechanicImmunityList = (1 << MECHANIC_SHIELD) | (1 << MECHANIC_INVULNERABILITY) | (1 << MECHANIC_IMMUNE_SHIELD);
