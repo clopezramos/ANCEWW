@@ -53,48 +53,54 @@ enum MinigobEscapeMisc
 {
     QUEST_MINIGOB_ESCAPE = 30000,
 
-    NPC_RHONIN_ORIGINAL = 16128,
-    NPC_RHONIN_RANDOM_0 = 44003,
-    NPC_RHONIN_RANDOM_1 = 44004,
-    NPC_RHONIN_RANDOM_2 = 44005,
-    NPC_RHONIN_EVENT = 44002,
-    NPC_ESCAPE_ROBOT = 44007,
-    NPC_MINIGOBESCAPE_MINIGOB = 44000,
+    NPC_MINIGOB_ESCAPE_RHONIN_ORIGINAL = 16128,
+    NPC_MINIGOB_ESCAPE_RHONIN_RANDOM_0 = 44003,
+    NPC_MINIGOB_ESCAPE_RHONIN_RANDOM_1 = 44004,
+    NPC_MINIGOB_ESCAPE_RHONIN_RANDOM_2 = 44005,
+    NPC_MINIGOB_ESCAPE_RHONIN_EVENT = 44002,
+    NPC_MINIGOB_ESCAPE_ROBOT = 44007,
+    NPC_MINIGOB_ESCAPE_MINIGOB = 44000,
 
     // Robot
-    SAY_ESCAPE_DETECT_0_0 = 0,
-    SAY_ESCAPE_DETECT_0_1 = 1,
-    SAY_ESCAPE_RESET_0 = 2,
-    SAY_ESCAPE_TERMINATED_0 = 3,
-    SAY_ESCAPE_REMOVE_0 = 4,
+    SAY_MINIGOB_ESCAPE_ROBOT_DETECT_0_0 = 0,
+    SAY_MINIGOB_ESCAPE_ROBOT_DETECT_0_1 = 1,
+    SAY_MINIGOB_ESCAPE_ROBOT_RESET_0 = 2,
+    SAY_MINIGOB_ESCAPE_ROBOT_TERMINATED_0 = 3,
+    SAY_MINIGOB_ESCAPE_ROBOT_REMOVE_0 = 4,
 
     // Teleports
-    SPELL_TELEPORT_RANDOM_0 = 62940,
-    SPELL_TELEPORT_RANDOM_1 = 47653,
-    SPELL_TELEPORT_IN = 40163,
-    SPELL_TELEPORT_OUT = 7791,
+    SPELL_MINIGOB_ESCAPE_TELEPORT_RANDOM_0 = 62940,
+    SPELL_MINIGOB_ESCAPE_TELEPORT_RANDOM_1 = 47653,
+    SPELL_MINIGOB_ESCAPE_TELEPORT_IN = 40163,
+    SPELL_MINIGOB_ESCAPE_TELEPORT_OUT = 7791,
 
     // Robot
-    SPELL_LASER_BARRAGE = 64766,
-    SPELL_LASER_BARRAGE_TRIGGER = 64769,
-    SPELL_MAGNETIC_FIELD = 64668,
+    SPELL_MINIGOB_ESCAPE_ROBOT_LASER_BARRAGE = 64766,
+    SPELL_MINIGOB_ESCAPE_ROBOT_LASER_BARRAGE_TRIGGER = 64769,
+    SPELL_MINIGOB_ESCAPE_ROBOT_MAGNETIC_FIELD = 64668,
+};
+
+enum MinigobEscapeEvents
+{
+    // Trigger
+    EVENT_MINIGOB_ESCAPE_TRIGGER_SEARCH_TARGETS = 1,
 
     // Robot
-    EVENT_ENGAGE_COMBAT = 1,
-    EVENT_SEARCH_TARGETS,
-    EVENT_ROOT_TARGETS,
-    EVENT_LASER_BARRAGE,
-    EVENT_REMOVE_TARGETS_INMUNE_AURAS,
+    EVENT_MINIGOB_ESCAPE_ROBOT_ENGAGE_COMBAT,
+    EVENT_MINIGOB_ESCAPE_ROBOT_SEARCH_TARGETS,
+    EVENT_MINIGOB_ESCAPE_ROBOT_ROOT_TARGETS,
+    EVENT_MINIGOB_ESCAPE_ROBOT_LASER_BARRAGE,
+    EVENT_MINIGOB_ESCAPE_ROBOT_REMOVE_TARGETS_IMMUNE_AURAS,
 };
 
 static uint32 const MinigobEscapePhase = 2;
 static WorldLocation const MinigobEscapeTeleportIn = { 0u, Position(-5114.554f, -1777.687f, 497.83578f, 1.15f) };
 static WorldLocation const MinigobEscapeTeleportOut = { 571u, Position(5789.215f, 770.495f, 661.28241f, 5.8f) };
 
-class RandomLocationPlayerSearcher
+class MinigobEscapeRandomLocationPlayerSearcher
 {
     public:
-        RandomLocationPlayerSearcher(Unit const* source, float range) : _source(source), _range(range) { }
+        MinigobEscapeRandomLocationPlayerSearcher(Unit const* source, float range) : _source(source), _range(range) { }
 
         bool operator()(Player* player)
         {
@@ -124,14 +130,14 @@ struct npc_minigob_escape_trigger : public ScriptedAI
 
     void Reset() override
     {
-        _events.ScheduleEvent(EVENT_SEARCH_TARGETS, Milliseconds(1));
+        _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_TRIGGER_SEARCH_TARGETS, Milliseconds(1));
     }
 
     void UpdateAI(uint32 diff) override
     {
         _events.Update(diff);
 
-        if (_events.ExecuteEvent() == EVENT_SEARCH_TARGETS)
+        if (_events.ExecuteEvent() == EVENT_MINIGOB_ESCAPE_TRIGGER_SEARCH_TARGETS)
         {
             for (auto itr = _foundPlayers.begin(); itr != _foundPlayers.end();)
             {
@@ -161,8 +167,8 @@ struct npc_minigob_escape_trigger : public ScriptedAI
             }
 
             std::list<Player*> players;
-            RandomLocationPlayerSearcher check(me, searchDistance);
-            Trinity::PlayerListSearcher<RandomLocationPlayerSearcher> searcher(me, players, check);
+            MinigobEscapeRandomLocationPlayerSearcher check(me, searchDistance);
+            Trinity::PlayerListSearcher<MinigobEscapeRandomLocationPlayerSearcher> searcher(me, players, check);
             Cell::VisitWorldObjects(me, searcher, searchDistance);
 
             for (Player* foundPlayer : players)
@@ -188,8 +194,8 @@ private:
     std::unordered_set<ObjectGuid> _foundPlayers;
 };
 
-static uint32 const MechanicImmunityList = (1 << MECHANIC_SHIELD) | (1 << MECHANIC_INVULNERABILITY) | (1 << MECHANIC_IMMUNE_SHIELD);
-static std::list<AuraType> const AuraImmunityList =
+static uint32 const MinigobEscapeMechanicImmunityList = (1 << MECHANIC_SHIELD) | (1 << MECHANIC_INVULNERABILITY) | (1 << MECHANIC_IMMUNE_SHIELD);
+static std::list<AuraType> const MinigobEscapeAuraImmunityList =
 {
     SPELL_AURA_MOD_STEALTH,
     SPELL_AURA_MOD_INVISIBILITY,
@@ -200,10 +206,10 @@ static std::list<AuraType> const AuraImmunityList =
     SPELL_AURA_MOD_IMMUNE_AURA_APPLY_SCHOOL
 };
 
-class RobotTargetSearcher
+class MinigobEscapeRobotTargetSearcher
 {
     public:
-        RobotTargetSearcher(Unit const* source, float range) : _source(source), _range(range) { }
+        MinigobEscapeRobotTargetSearcher(Unit const* source, float range) : _source(source), _range(range) { }
 
         bool operator()(Unit* unit)
         {
@@ -235,7 +241,7 @@ struct npc_minigob_escape_robot : public ScriptedAI
     void Reset() override
     {
         _events.Reset();
-        _events.ScheduleEvent(EVENT_SEARCH_TARGETS, Milliseconds(1));
+        _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_ROBOT_SEARCH_TARGETS, Milliseconds(1));
     }
 
     void MoveInLineOfSight(Unit* /*who*/) override
@@ -252,8 +258,8 @@ struct npc_minigob_escape_robot : public ScriptedAI
 
     void JustEngagedWith(Unit* /*who*/) override
     {
-        Talk(SAY_ESCAPE_DETECT_0_0);
-        _events.ScheduleEvent(EVENT_ENGAGE_COMBAT, Seconds(2));
+        Talk(SAY_MINIGOB_ESCAPE_ROBOT_DETECT_0_0);
+        _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_ROBOT_ENGAGE_COMBAT, Seconds(2));
     }
 
     void KilledUnit(Unit* victim) override
@@ -261,7 +267,7 @@ struct npc_minigob_escape_robot : public ScriptedAI
         if (victim->GetTypeId() != TYPEID_PLAYER)
             return;
 
-        Talk(SAY_ESCAPE_TERMINATED_0);
+        Talk(SAY_MINIGOB_ESCAPE_ROBOT_TERMINATED_0);
     }
 
     void EnterEvadeMode(EvadeReason /*why*/) override
@@ -281,7 +287,7 @@ struct npc_minigob_escape_robot : public ScriptedAI
         me->DoNotReacquireTarget();
         me->ModifyHealth(me->GetMaxHealth());
 
-        Talk(SAY_ESCAPE_RESET_0);
+        Talk(SAY_MINIGOB_ESCAPE_ROBOT_RESET_0);
 
         Reset();
     }
@@ -294,7 +300,7 @@ struct npc_minigob_escape_robot : public ScriptedAI
         {
             switch (eventId)
             {
-                case EVENT_SEARCH_TARGETS:
+                case EVENT_MINIGOB_ESCAPE_ROBOT_SEARCH_TARGETS:
                     SearchTargets();
                     if (!_targets.empty())
                         EngageTargets();
@@ -304,38 +310,38 @@ struct npc_minigob_escape_robot : public ScriptedAI
                     else
                         _events.Repeat(Milliseconds(1));
                     break;
-                case EVENT_ENGAGE_COMBAT:
-                    Talk(SAY_ESCAPE_DETECT_0_1);
-                    _events.ScheduleEvent(EVENT_ROOT_TARGETS, Milliseconds(1));
-                    _events.ScheduleEvent(EVENT_LASER_BARRAGE, Seconds(4));
-                    _events.ScheduleEvent(EVENT_REMOVE_TARGETS_INMUNE_AURAS, Seconds(1));
+                case EVENT_MINIGOB_ESCAPE_ROBOT_ENGAGE_COMBAT:
+                    Talk(SAY_MINIGOB_ESCAPE_ROBOT_DETECT_0_1);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_ROBOT_ROOT_TARGETS, Milliseconds(1));
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_ROBOT_LASER_BARRAGE, Seconds(4));
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_ROBOT_REMOVE_TARGETS_IMMUNE_AURAS, Seconds(1));
                     break;
-                case EVENT_ROOT_TARGETS:
+                case EVENT_MINIGOB_ESCAPE_ROBOT_ROOT_TARGETS:
                     for (ObjectGuid targetGuid : _targets)
                     {
                         if (Unit* target = ObjectAccessor::GetUnit(*me, targetGuid))
-                            if (!target->HasAura(SPELL_MAGNETIC_FIELD))
-                                me->AddAura(SPELL_MAGNETIC_FIELD, target);
+                            if (!target->HasAura(SPELL_MINIGOB_ESCAPE_ROBOT_MAGNETIC_FIELD))
+                                me->AddAura(SPELL_MINIGOB_ESCAPE_ROBOT_MAGNETIC_FIELD, target);
                     }
                     _events.Repeat(Milliseconds(1));
                     break;
-                case EVENT_LASER_BARRAGE:
+                case EVENT_MINIGOB_ESCAPE_ROBOT_LASER_BARRAGE:
                     if (ObjectGuid targetGuid = Trinity::Containers::SelectRandomContainerElement(_targets))
                     {
                         if (Unit* target = ObjectAccessor::GetUnit(*me, targetGuid))
                             if (!CheckAuras(target))
-                                DoCast(target, SPELL_LASER_BARRAGE);
+                                DoCast(target, SPELL_MINIGOB_ESCAPE_ROBOT_LASER_BARRAGE);
                     }
                     _events.Repeat(Seconds(1));
                     break;
-                case EVENT_REMOVE_TARGETS_INMUNE_AURAS:
+                case EVENT_MINIGOB_ESCAPE_ROBOT_REMOVE_TARGETS_IMMUNE_AURAS:
                     for (ObjectGuid targetGuid : _targets)
                     {
                         if (Unit* target = ObjectAccessor::GetUnit(*me, targetGuid))
                             if (CheckAuras(target))
                             {
                                 RemoveAuras(target);
-                                Talk(SAY_ESCAPE_REMOVE_0, target);
+                                Talk(SAY_MINIGOB_ESCAPE_ROBOT_REMOVE_0, target);
                             }
                     }
                     _events.Repeat(Seconds(1));
@@ -364,10 +370,10 @@ private:
         if (target->HasAura(31224 /*ROGUE_CLOAK_OF_SHADOWS*/) || target->HasAura(65961 /*ROGUE_CLOAK_OF_SHADOWS*/))
             return true;
 
-        if (target->HasAuraWithMechanic(MechanicImmunityList))
+        if (target->HasAuraWithMechanic(MinigobEscapeMechanicImmunityList))
             return true;
 
-        for (AuraType type : AuraImmunityList)
+        for (AuraType type : MinigobEscapeAuraImmunityList)
         {
             if (target->HasAuraType(type))
                 return true;
@@ -383,17 +389,17 @@ private:
         if (target->HasAura(65961 /*ROGUE_CLOAK_OF_SHADOWS*/))
             target->RemoveAura(65961);
 
-        target->RemoveAurasWithMechanic(MechanicImmunityList);
+        target->RemoveAurasWithMechanic(MinigobEscapeMechanicImmunityList);
 
-        for (AuraType type : AuraImmunityList)
+        for (AuraType type : MinigobEscapeAuraImmunityList)
             target->RemoveAurasByType(type);
     }
 
     void SearchTargets()
     {
         std::list<Unit*> targetsFound;
-        RobotTargetSearcher check(me, combatDistance);
-        Trinity::UnitListSearcher<RobotTargetSearcher> searcher(me, targetsFound, check);
+        MinigobEscapeRobotTargetSearcher check(me, combatDistance);
+        Trinity::UnitListSearcher<MinigobEscapeRobotTargetSearcher> searcher(me, targetsFound, check);
         Cell::VisitAllObjects(me, searcher, combatDistance);
 
         _targets.clear();
@@ -415,7 +421,7 @@ private:
     GuidVector _targets;
 };
 
-static WorldLocation const randomTeleport[] =
+static WorldLocation const MinigobEscapeRandomTeleportLocations[] =
 {
     { 1u,   Position(16220.393f, 16403.613f, -64.37996f,  6.23f) },
     { 571u, Position(5664.837f,  2013.375f,  1544.07031f, 3.58f) },
@@ -431,7 +437,7 @@ class spell_minigob_escape_teleport_random : public SpellScript
     {
         if (Unit* originalCaster = GetOriginalCaster())
         {
-            if (originalCaster->GetEntry() == NPC_RHONIN_ORIGINAL)
+            if (originalCaster->GetEntry() == NPC_MINIGOB_ESCAPE_RHONIN_ORIGINAL)
                 return true;
         }
 
@@ -448,7 +454,7 @@ class spell_minigob_escape_teleport_random : public SpellScript
 
         if (target->IsGameMaster())
         {
-            target->TeleportTo(Trinity::Containers::SelectRandomContainerElement(randomTeleport));
+            target->TeleportTo(Trinity::Containers::SelectRandomContainerElement(MinigobEscapeRandomTeleportLocations));
             return;
         }
 
@@ -471,7 +477,7 @@ class spell_minigob_escape_teleport_random : public SpellScript
         {
             if (Player* member = itr->GetSource())
                 if (member->IsAlive() && member->IsWithinDistInMap(GetCaster(), GetSpellInfo()->GetMaxRange()))
-                    member->TeleportTo(Trinity::Containers::SelectRandomContainerElement(randomTeleport));
+                    member->TeleportTo(Trinity::Containers::SelectRandomContainerElement(MinigobEscapeRandomTeleportLocations));
         }
     }
 
@@ -490,7 +496,7 @@ class spell_minigob_escape_teleport_in : public SpellScript
     {
         if (Unit* originalCaster = GetOriginalCaster())
         {
-            if (originalCaster->GetEntry() == NPC_RHONIN_RANDOM_0 || originalCaster->GetEntry() == NPC_RHONIN_RANDOM_1 || originalCaster->GetEntry() == NPC_RHONIN_RANDOM_2)
+            if (originalCaster->GetEntry() == NPC_MINIGOB_ESCAPE_RHONIN_RANDOM_0 || originalCaster->GetEntry() == NPC_MINIGOB_ESCAPE_RHONIN_RANDOM_1 || originalCaster->GetEntry() == NPC_MINIGOB_ESCAPE_RHONIN_RANDOM_2)
                 return true;
         }
 
@@ -523,7 +529,7 @@ class spell_minigob_escape_teleport_out : public SpellScript
     {
         if (Unit* originalCaster = GetOriginalCaster())
         {
-            if (originalCaster->GetEntry() == NPC_RHONIN_EVENT)
+            if (originalCaster->GetEntry() == NPC_MINIGOB_ESCAPE_RHONIN_EVENT)
                 return true;
         }
 
@@ -556,7 +562,7 @@ class spell_minigob_escape_arcane_blast : public SpellScript
     {
         if (Unit* originalCaster = GetOriginalCaster())
         {
-            if (originalCaster->GetEntry() == NPC_MINIGOBESCAPE_MINIGOB)
+            if (originalCaster->GetEntry() == NPC_MINIGOB_ESCAPE_MINIGOB)
                 return true;
         }
 
@@ -583,7 +589,7 @@ class spell_minigob_escape_overload : public SpellScript
     {
         if (Unit* originalCaster = GetOriginalCaster())
         {
-            if (originalCaster->GetEntry() == NPC_MINIGOBESCAPE_MINIGOB)
+            if (originalCaster->GetEntry() == NPC_MINIGOB_ESCAPE_MINIGOB)
                 return true;
         }
 
@@ -608,7 +614,7 @@ class spell_minigob_escape_magnetic_field : public AuraScript
 
     bool Load() override
     {
-        if (GetCaster()->GetEntry() == NPC_ESCAPE_ROBOT)
+        if (GetCaster()->GetEntry() == NPC_MINIGOB_ESCAPE_ROBOT)
             return true;
 
         return false;
