@@ -169,7 +169,7 @@ INSERT INTO `creature_text` (`CreatureID`, `GroupID`, `ID`, `Text`, `Type`, `Lan
 (@ENTRY+09, 0, 4, 'Tu lo que quieres es un poco de mandanga de la buena', 12, 0, 100, 1, 0, 0, 0, 0, 'Manabonk Escape - Amador - SAY_AMADOR_0_4'),
 (@ENTRY+09, 0, 5, '¿Echamos un pinchito?',                                12, 0, 100, 1, 0, 0, 0, 0, 'Manabonk Escape - Amador - SAY_AMADOR_0_5'),
 -- Fermin Trujillo
-(@ENTRY+13, 0, 0, 'Con lo agustito que estaba yo en Aquí no hay quien viva...',     12, 0, 100, 1, 0, 0, 0, 0, 'Manabonk Escape - Fermin - SAY_FERMIN_0_0'),
+(@ENTRY+13, 0, 0, 'Con lo a gustito que estaba yo en Aquí no hay quien viva...',     12, 0, 100, 1, 0, 0, 0, 0, 'Manabonk Escape - Fermin - SAY_FERMIN_0_0'),
 (@ENTRY+13, 0, 1, 'Viva el alto - standing....',                                    12, 0, 100, 1, 0, 0, 0, 0, 'Manabonk Escape - Fermin - SAY_FERMIN_0_1'),
 (@ENTRY+13, 0, 2, "No me toca una mujer normal... Toas las locas'l coño pa mi...'", 12, 0, 100, 1, 0, 0, 0, 0, 'Manabonk Escape - Fermin - SAY_FERMIN_0_2'),
 (@ENTRY+13, 0, 3, '¡Sardinas! ¡Sardinas! ¡Espetos para todos!',                     14, 0, 100, 5, 0, 0, 0, 0, 'Manabonk Escape - Fermin - SAY_FERMIN_0_3'),
