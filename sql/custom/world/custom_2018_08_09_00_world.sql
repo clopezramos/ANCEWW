@@ -112,4 +112,4 @@ INSERT INTO `smart_scripts` (`entryorguid`,`source_type`,`id`,`link`,`event_type
 (@ENTRY+20, 0, 0, 0,  0, 0, 100, 0,  3000,  3000, 10000, 10000, 11, 56934, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, "Elemental de Fuego esclavizado - In Combat - Cast 'Firebomb'"),
 (@ENTRY+20, 0, 1, 0,  4, 0, 100, 0,     0,     0,     0,     0, 11, 47075, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, "Elemental de Fuego esclavizado - On Aggro - Cast 'Immolation'"),
 (@ENTRY+20, 0, 2, 0,  0, 0, 100, 0, 10000, 10000, 10000, 10000, 11, 60744, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, "Elemental de Fuego esclavizado - In Combat - Cast 'Immolation'"),
-(@ENTRY+20, 0, 3, 0, 23, 0, 100, 0, 70380,     1,     0,     0, 37,     0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, "Elemental de Fuego esclavizado - On Has Aura 'Deep Freeze' - Kill Self");
+(@ENTRY+20, 0, 3, 0, 23, 0, 100, 1, 70380,     1,     0,     0, 37,     0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, "Elemental de Fuego esclavizado - On Has Aura 'Deep Freeze' - Kill Self");
