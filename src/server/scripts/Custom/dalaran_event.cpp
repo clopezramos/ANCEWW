@@ -59,6 +59,7 @@ enum MinigobEscapeMisc
     NPC_RHONIN_RANDOM_2 = 44005,
     NPC_RHONIN_EVENT = 44002,
     NPC_ESCAPE_ROBOT = 44007,
+    NPC_MINIGOBESCAPE_MINIGOB = 44000,
 
     // Robot
     SAY_ESCAPE_DETECT_0_0 = 0,
@@ -546,6 +547,60 @@ class spell_minigob_escape_teleport_out : public SpellScript
     }
 };
 
+// 51797 - Arcane Blast (Rank 1)
+class spell_minigob_escape_arcane_blast : public SpellScript
+{
+    PrepareSpellScript(spell_minigob_escape_arcane_blast);
+
+    bool Load() override
+    {
+        if (Unit* originalCaster = GetOriginalCaster())
+        {
+            if (originalCaster->GetEntry() == NPC_MINIGOBESCAPE_MINIGOB)
+                return true;
+        }
+
+        return false;
+    }
+
+    void CalculateDamage()
+    {
+        SetHitDamage(GetHitDamage() * 18);
+    }
+
+    void Register() override
+    {
+        OnHit += SpellHitFn(spell_minigob_escape_arcane_blast::CalculateDamage);
+    }
+};
+
+// 51743 - Overload
+class spell_minigob_escape_overload : public SpellScript
+{
+    PrepareSpellScript(spell_minigob_escape_overload);
+
+    bool Load() override
+    {
+        if (Unit* originalCaster = GetOriginalCaster())
+        {
+            if (originalCaster->GetEntry() == NPC_MINIGOBESCAPE_MINIGOB)
+                return true;
+        }
+
+        return false;
+    }
+
+    void CalculateDamage()
+    {
+        SetHitDamage(GetHitDamage() * 10);
+    }
+
+    void Register() override
+    {
+        OnHit += SpellHitFn(spell_minigob_escape_overload::CalculateDamage);
+    }
+};
+
 // 64668 - Magnetic Field
 class spell_minigob_escape_magnetic_field : public AuraScript
 {
@@ -559,7 +614,7 @@ class spell_minigob_escape_magnetic_field : public AuraScript
         return false;
     }
 
-    void ModDuration(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    void ModifyDuration(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
     {
         SetMaxDuration(-1);
         SetDuration(-1);
@@ -567,7 +622,7 @@ class spell_minigob_escape_magnetic_field : public AuraScript
 
     void Register() override
     {
-        OnEffectApply += AuraEffectApplyFn(spell_minigob_escape_magnetic_field::ModDuration, EFFECT_0, SPELL_AURA_MOD_ROOT, AURA_EFFECT_HANDLE_REAL);
+        OnEffectApply += AuraEffectApplyFn(spell_minigob_escape_magnetic_field::ModifyDuration, EFFECT_0, SPELL_AURA_MOD_ROOT, AURA_EFFECT_HANDLE_REAL);
     }
 };
 
@@ -646,6 +701,8 @@ void AddDalaranEventScripts()
     RegisterSpellScript(spell_minigob_escape_teleport_random);
     RegisterSpellScript(spell_minigob_escape_teleport_in);
     RegisterSpellScript(spell_minigob_escape_teleport_out);
+    RegisterSpellScript(spell_minigob_escape_arcane_blast);
+    RegisterSpellScript(spell_minigob_escape_overload);
     RegisterAuraScript(spell_minigob_escape_magnetic_field);
 
     new condition_minigob_event_alone();
