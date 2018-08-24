@@ -39,6 +39,7 @@
 #include "ScriptMgr.h"
 #include "SharedDefines.h"
 #include "SpellAuraDefines.h"
+#include "SpellAuraEffects.h"
 #include "SpellInfo.h"
 #include "SpellScript.h"
 #include "Unit.h"
@@ -53,6 +54,10 @@ enum MinigobEscapeMisc
     QUEST_MINIGOB_ESCAPE = 30000,
 
     NPC_RHONIN_ORIGINAL = 16128,
+    NPC_RHONIN_RANDOM_0 = 44003,
+    NPC_RHONIN_RANDOM_1 = 44004,
+    NPC_RHONIN_RANDOM_2 = 44005,
+    NPC_RHONIN_EVENT = 44002,
     NPC_ESCAPE_ROBOT = 44007,
 
     // Robot
@@ -61,6 +66,12 @@ enum MinigobEscapeMisc
     SAY_ESCAPE_RESET_0 = 2,
     SAY_ESCAPE_TERMINATED_0 = 3,
     SAY_ESCAPE_REMOVE_0 = 4,
+
+    // Teleports
+    SPELL_TELEPORT_RANDOM_0 = 62940,
+    SPELL_TELEPORT_RANDOM_1 = 47653,
+    SPELL_TELEPORT_IN = 40163,
+    SPELL_TELEPORT_OUT = 7791,
 
     // Robot
     SPELL_LASER_BARRAGE = 64766,
@@ -76,6 +87,8 @@ enum MinigobEscapeMisc
 };
 
 static uint32 const MinigobEscapePhase = 2;
+static WorldLocation const MinigobEscapeTeleportIn = { 0u, Position(-5114.554f, -1777.687f, 497.83578f, 1.15f) };
+static WorldLocation const MinigobEscapeTeleportOut = { 571u, Position(5789.215f, 770.495f, 661.28241f, 5.8f) };
 
 class RandomLocationPlayerSearcher
 {
@@ -153,11 +166,12 @@ struct npc_minigob_escape_trigger : public ScriptedAI
 
             for (Player* foundPlayer : players)
             {
-                _foundPlayers.insert(foundPlayer->GetGUID());
-
-                foundPlayer->SetPhaseMask(me->GetPhaseMask() | MinigobEscapePhase, true);
                 if (MinigobEscapePlayerInfo* info = foundPlayer->_customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey))
+                {
+                    _foundPlayers.insert(foundPlayer->GetGUID());
+                    foundPlayer->SetPhaseMask(foundPlayer->GetPhaseMask() | MinigobEscapePhase, true);
                     info->Status = MINIGOBESCAPE_PLAYERINFO_STATUS_RP;
+                }
             }
 
             me->setActive(players.empty() && _foundPlayers.empty());
@@ -198,7 +212,7 @@ class RobotTargetSearcher
             if (unit->ToPlayer() && unit->ToPlayer()->IsGameMaster())
                 return false;
 
-            if (unit->IsAlive() && !_source->IsFriendlyTo(unit) && unit->IsInMap(_source) && unit->IsWithinDist(_source, _range))
+            if (unit->IsAlive() && !_source->IsFriendlyTo(unit) && unit->IsWithinDistInMap(_source, _range))
                 return true;
 
             return false;
@@ -414,8 +428,11 @@ class spell_minigob_escape_teleport_random : public SpellScript
 
     bool Load() override
     {
-        if (GetOriginalCaster() && GetOriginalCaster()->GetEntry() == NPC_RHONIN_ORIGINAL)
-            return true;
+        if (Unit* originalCaster = GetOriginalCaster())
+        {
+            if (originalCaster->GetEntry() == NPC_RHONIN_ORIGINAL)
+                return true;
+        }
 
         return false;
     }
@@ -430,7 +447,7 @@ class spell_minigob_escape_teleport_random : public SpellScript
 
         if (target->IsGameMaster())
         {
-            target->TeleportTo(randomTeleport[urand(0, 2)]);
+            target->TeleportTo(Trinity::Containers::SelectRandomContainerElement(randomTeleport));
             return;
         }
 
@@ -453,13 +470,79 @@ class spell_minigob_escape_teleport_random : public SpellScript
         {
             if (Player* member = itr->GetSource())
                 if (member->IsAlive() && member->IsWithinDistInMap(GetCaster(), GetSpellInfo()->GetMaxRange()))
-                    member->TeleportTo(randomTeleport[urand(0, 2)]);
+                    member->TeleportTo(Trinity::Containers::SelectRandomContainerElement(randomTeleport));
         }
     }
 
     void Register() override
     {
         OnHit += SpellHitFn(spell_minigob_escape_teleport_random::Teleport);
+    }
+};
+
+// 40163 - Teleport
+class spell_minigob_escape_teleport_in : public SpellScript
+{
+    PrepareSpellScript(spell_minigob_escape_teleport_in);
+
+    bool Load() override
+    {
+        if (Unit* originalCaster = GetOriginalCaster())
+        {
+            if (originalCaster->GetEntry() == NPC_RHONIN_RANDOM_0 || originalCaster->GetEntry() == NPC_RHONIN_RANDOM_1 || originalCaster->GetEntry() == NPC_RHONIN_RANDOM_2)
+                return true;
+        }
+
+        return false;
+    }
+
+    void Teleport()
+    {
+        PreventHitEffect(EFFECT_0);
+
+        Player* target = GetHitPlayer();
+        if (!target)
+            return;
+
+        target->TeleportTo(MinigobEscapeTeleportIn);
+    }
+
+    void Register() override
+    {
+        OnHit += SpellHitFn(spell_minigob_escape_teleport_in::Teleport);
+    }
+};
+
+// 7791 - Teleport
+class spell_minigob_escape_teleport_out : public SpellScript
+{
+    PrepareSpellScript(spell_minigob_escape_teleport_out);
+
+    bool Load() override
+    {
+        if (Unit* originalCaster = GetOriginalCaster())
+        {
+            if (originalCaster->GetEntry() == NPC_RHONIN_EVENT)
+                return true;
+        }
+
+        return false;
+    }
+
+    void Teleport()
+    {
+        PreventHitEffect(EFFECT_0);
+
+        Player* target = GetHitPlayer();
+        if (!target)
+            return;
+
+        target->TeleportTo(MinigobEscapeTeleportOut);
+    }
+
+    void Register() override
+    {
+        OnHit += SpellHitFn(spell_minigob_escape_teleport_out::Teleport);
     }
 };
 
@@ -561,6 +644,8 @@ void AddDalaranEventScripts()
     RegisterCreatureAI(npc_minigob_escape_robot);
 
     RegisterSpellScript(spell_minigob_escape_teleport_random);
+    RegisterSpellScript(spell_minigob_escape_teleport_in);
+    RegisterSpellScript(spell_minigob_escape_teleport_out);
     RegisterAuraScript(spell_minigob_escape_magnetic_field);
 
     new condition_minigob_event_alone();

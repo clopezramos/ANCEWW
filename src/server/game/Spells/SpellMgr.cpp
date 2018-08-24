@@ -4821,17 +4821,12 @@ void SpellMgr::LoadSpellInfoCorrections()
         spellInfo->CastTimeEntry = sSpellCastTimesStore.LookupEntry(1); // instant
     });
 
-    // Teleport (In)
-    ApplySpellFix({ 40163 }, [](SpellInfo* spellInfo)
-    {
-        spellInfo->AttributesEx5 |= SPELL_ATTR5_USABLE_WHILE_STUNNED;
-    });
-
-    // Teleport Self (Random), Teleport (Visual)
-    ApplySpellFix({ 47653, 62940 }, [](SpellInfo* spellInfo)
+    // Teleport Self (Random), Teleport (Visual), Teleport (In)
+    ApplySpellFix({ 47653, 62940, 40163 }, [](SpellInfo* spellInfo)
     {
         spellInfo->RangeEntry = sSpellRangeStore.LookupEntry(3); // 20 yards
         spellInfo->Effects[EFFECT_0].TargetA = SpellImplicitTargetInfo(TARGET_UNIT_TARGET_ANY);
+        spellInfo->AttributesEx5 |= SPELL_ATTR5_USABLE_WHILE_STUNNED;
     });
 
     // Deep Freeze
