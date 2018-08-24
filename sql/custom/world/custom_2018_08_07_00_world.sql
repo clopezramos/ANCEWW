@@ -81,8 +81,8 @@ INSERT INTO `conditions` (`SourceTypeOrReferenceId`,`SourceGroup`,`SourceEntry`,
 -- Random teleport spell
 DELETE FROM `spell_linked_spell` WHERE `spell_trigger` IN (62940);
 INSERT INTO `spell_linked_spell` (`spell_trigger`, `spell_effect`, `type`, `comment`) VALUES
-(62940, 47653, 0, 'Minigob Escape - Teleport Random');
+(62940, 47653, 1, 'Minigob Escape - Teleport Random');
 
-DELETE FROM `spell_script_names` WHERE `spell_id` IN (47653);
+DELETE FROM `spell_script_names` WHERE `spell_id` IN ('spell_minigob_escape_teleport_random');
 INSERT INTO `spell_script_names` (`spell_id`, `ScriptName`) VALUES
 (47653, 'spell_minigob_escape_teleport_random');

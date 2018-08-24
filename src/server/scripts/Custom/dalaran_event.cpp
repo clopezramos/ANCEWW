@@ -53,6 +53,7 @@ enum MinigobEscapeMisc
     QUEST_MINIGOB_ESCAPE = 30000,
 
     NPC_RHONIN_ORIGINAL = 16128,
+    NPC_ESCAPE_ROBOT = 44007,
 
     // Robot
     SAY_ESCAPE_DETECT_0_0 = 0,
@@ -413,7 +414,7 @@ class spell_minigob_escape_teleport_random : public SpellScript
 
     bool Load() override
     {
-        if (GetCaster()->GetEntry() == NPC_RHONIN_ORIGINAL)
+        if (GetOriginalCaster() && GetOriginalCaster()->GetEntry() == NPC_RHONIN_ORIGINAL)
             return true;
 
         return false;
@@ -459,6 +460,31 @@ class spell_minigob_escape_teleport_random : public SpellScript
     void Register() override
     {
         OnHit += SpellHitFn(spell_minigob_escape_teleport_random::Teleport);
+    }
+};
+
+// 64668 - Magnetic Field
+class spell_minigob_escape_magnetic_field : public AuraScript
+{
+    PrepareAuraScript(spell_minigob_escape_magnetic_field);
+
+    bool Load() override
+    {
+        if (GetCaster()->GetEntry() == NPC_ESCAPE_ROBOT)
+            return true;
+
+        return false;
+    }
+
+    void ModDuration(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        SetMaxDuration(-1);
+        SetDuration(-1);
+    }
+
+    void Register() override
+    {
+        OnEffectApply += AuraEffectApplyFn(spell_minigob_escape_magnetic_field::ModDuration, EFFECT_0, SPELL_AURA_MOD_ROOT, AURA_EFFECT_HANDLE_REAL);
     }
 };
 
@@ -535,6 +561,7 @@ void AddDalaranEventScripts()
     RegisterCreatureAI(npc_minigob_escape_robot);
 
     RegisterSpellScript(spell_minigob_escape_teleport_random);
+    RegisterAuraScript(spell_minigob_escape_magnetic_field);
 
     new condition_minigob_event_alone();
     new condition_minigob_event_in_group();

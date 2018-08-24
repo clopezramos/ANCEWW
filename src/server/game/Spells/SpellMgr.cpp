@@ -4797,6 +4797,58 @@ void SpellMgr::LoadSpellInfoCorrections()
         spellInfo->Effects[EFFECT_1].RadiusEntry = sSpellRadiusStore.LookupEntry(EFFECT_RADIUS_3_YARDS); // 3yd
     });
 
+    //
+    // CUSTOM
+    //
+
+    // Magnetic Field
+    ApplySpellFix({ 64668 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->Mechanic = MECHANIC_NONE;
+    });
+
+    // Laser Barrage, Revive
+    ApplySpellFix({ 64766, 51918 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->RangeEntry = sSpellRangeStore.LookupEntry(13); // anywhere
+    });
+
+    // Teleport (Out)
+    ApplySpellFix({ 7791 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->RangeEntry = sSpellRangeStore.LookupEntry(13); // anywhere
+        spellInfo->Effects[EFFECT_0].TargetA = SpellImplicitTargetInfo(TARGET_UNIT_TARGET_ANY);
+        spellInfo->CastTimeEntry = sSpellCastTimesStore.LookupEntry(1); // instant
+    });
+
+    // Teleport (In)
+    ApplySpellFix({ 40163 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->AttributesEx5 |= SPELL_ATTR5_USABLE_WHILE_STUNNED;
+    });
+
+    // Teleport Self (Random), Teleport (Visual)
+    ApplySpellFix({ 47653, 62940 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->RangeEntry = sSpellRangeStore.LookupEntry(3); // 20 yards
+        spellInfo->Effects[EFFECT_0].TargetA = SpellImplicitTargetInfo(TARGET_UNIT_TARGET_ANY);
+    });
+
+    // Deep Freeze
+    ApplySpellFix({ 70381 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->AttributesEx3 &= ~SPELL_ATTR3_ONLY_TARGET_PLAYERS;
+    });
+
+    // Arcane Surge
+    ApplySpellFix({ 61272 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->RangeEntry = sSpellRangeStore.LookupEntry(13); // anywhere
+        spellInfo->AttributesEx2 |= SPELL_ATTR2_CAN_TARGET_NOT_IN_LOS;
+    });
+
+    // ENDOF CUSTOM
+
     for (uint32 i = 0; i < GetSpellInfoStoreSize(); ++i)
     {
         SpellInfo* spellInfo = mSpellInfoMap[i];
