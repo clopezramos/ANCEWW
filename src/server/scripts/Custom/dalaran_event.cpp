@@ -214,8 +214,9 @@ struct npc_minigob_escape_rhonin : public ScriptedAI
     {
     }
 
-    bool GossipSelect(Player* player, uint32 /*sender*/, uint32 action) override
+    bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
     {
+        uint32 const action = player->PlayerTalkClass->GetGossipOptionAction(gossipListId);
         if (Group* group = player->GetGroup())
         {
             switch (action)
