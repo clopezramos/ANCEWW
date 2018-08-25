@@ -25,6 +25,7 @@
 #include "CustomUtilities.h"
 #include "Duration.h"
 #include "EventMap.h"
+#include "GossipDef.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
 #include "GroupReference.h"
@@ -36,6 +37,7 @@
 #include "QuestDef.h"
 #include "Random.h"
 #include "ScriptedCreature.h"
+#include "ScriptedGossip.h"
 #include "ScriptMgr.h"
 #include "SharedDefines.h"
 #include "SpellAuraDefines.h"
@@ -46,6 +48,7 @@
 #include "UnitAI.h"
 #include <functional>
 #include <list>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -67,6 +70,13 @@ enum MinigobEscapeMisc
     SAY_MINIGOB_ESCAPE_ROBOT_RESET_0 = 2,
     SAY_MINIGOB_ESCAPE_ROBOT_TERMINATED_0 = 3,
     SAY_MINIGOB_ESCAPE_ROBOT_REMOVE_0 = 4,
+
+    // Rhonin (Event)
+    SAY_MINIGOB_ESCAPE_RHONIN_OUT_0 = 0,
+
+    // Rhonin (Event)
+    GOSSIP_MENU_MINIGOB_ESCAPE_RHONIN_0 = 44004,
+    GOSSIP_MENU_MINIGOB_ESCAPE_RHONIN_1 = 44005,
 
     // Teleports
     SPELL_MINIGOB_ESCAPE_TELEPORT_RANDOM_0 = 62940,
@@ -192,6 +202,110 @@ private:
 
     EventMap _events;
     std::unordered_set<ObjectGuid> _foundPlayers;
+};
+
+struct npc_minigob_escape_rhonin : public ScriptedAI
+{
+    npc_minigob_escape_rhonin(Creature* creature) : ScriptedAI(creature), _summons(creature)
+    {
+    }
+
+    void Reset() override
+    {
+    }
+
+    bool GossipSelect(Player* player, uint32 /*sender*/, uint32 action) override
+    {
+        if (Group* group = player->GetGroup())
+        {
+            switch (action)
+            {
+                case GOSSIP_ACTION_INFO_DEF + 1:
+                    StartEncounter(group);
+                    break;
+                case GOSSIP_ACTION_INFO_DEF + 2:
+                    GetIntoEncounter(group, player);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        if (action == GOSSIP_ACTION_INFO_DEF + 3)
+            TeleportOut(player);
+
+        player->PlayerTalkClass->ClearMenus();
+        player->PlayerTalkClass->SendCloseGossip();
+        return true;
+    }
+
+    bool GossipHello(Player* player) override
+    {
+        player->PlayerTalkClass->ClearMenus();
+
+        Group* group = player->GetGroup();
+        if (!group)
+        {
+            AddGossipItemFor(player, GOSSIP_MENU_MINIGOB_ESCAPE_RHONIN_0, 1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 3);
+            SendGossipMenuFor(player, GOSSIP_MENU_MINIGOB_ESCAPE_RHONIN_0, me->GetGUID());
+            return true;
+        }
+
+        if (IsGroupStored(group->GetGUID()))
+        {
+            if (!group->isRaidGroup() && group->GetMembersCount() >= 3 && player->GetQuestStatus(QUEST_MINIGOB_ESCAPE) == QUEST_STATUS_INCOMPLETE)
+            {
+                AddGossipItemFor(player, GOSSIP_MENU_MINIGOB_ESCAPE_RHONIN_1, 0, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 2);
+                AddGossipItemFor(player, GOSSIP_MENU_MINIGOB_ESCAPE_RHONIN_0, 1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 3);
+                SendGossipMenuFor(player, GOSSIP_MENU_MINIGOB_ESCAPE_RHONIN_1, me->GetGUID());
+                return true;
+            }
+            else
+            {
+                AddGossipItemFor(player, GOSSIP_MENU_MINIGOB_ESCAPE_RHONIN_0, 1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 3);
+                SendGossipMenuFor(player, GOSSIP_MENU_MINIGOB_ESCAPE_RHONIN_0, me->GetGUID());
+                return true;
+            }
+        }
+
+        if (!group->isRaidGroup() && group->GetMembersCount() >= 3 && player->GetQuestStatus(QUEST_MINIGOB_ESCAPE) == QUEST_STATUS_INCOMPLETE)
+            AddGossipItemFor(player, GOSSIP_MENU_MINIGOB_ESCAPE_RHONIN_0, 0, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
+        else if (player->IsGameMaster())
+            AddGossipItemFor(player, GOSSIP_MENU_MINIGOB_ESCAPE_RHONIN_0, 0, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
+
+        AddGossipItemFor(player, GOSSIP_MENU_MINIGOB_ESCAPE_RHONIN_0, 1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 3);
+        SendGossipMenuFor(player, GOSSIP_MENU_MINIGOB_ESCAPE_RHONIN_0, me->GetGUID());
+        return true;
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        _events.Update(diff);
+    }
+
+private:
+    bool IsGroupStored(ObjectGuid groupGuid) const
+    {
+        return _encounters.find(groupGuid) != _encounters.end();
+    }
+
+    void StartEncounter(Group* group) { }
+    void GetIntoEncounter(Group* group, Player* player) { }
+
+    void TeleportOut(Player* player)
+    {
+        if (!player)
+            return;
+
+        Talk(SAY_MINIGOB_ESCAPE_RHONIN_OUT_0, player);
+        DoCast(player, SPELL_MINIGOB_ESCAPE_TELEPORT_OUT);
+    }
+
+    float const searchDistance = 100.0f;
+
+    EventMap _events;
+    SummonList _summons;
+    std::unordered_map<ObjectGuid, uint32> _encounters;
 };
 
 static uint32 const MinigobEscapeMechanicImmunityList = (1 << MECHANIC_SHIELD) | (1 << MECHANIC_INVULNERABILITY) | (1 << MECHANIC_IMMUNE_SHIELD);
@@ -702,6 +816,7 @@ class condition_minigob_event_alone : public ConditionScript
 void AddDalaranEventScripts()
 {
     RegisterCreatureAI(npc_minigob_escape_trigger);
+    RegisterCreatureAI(npc_minigob_escape_rhonin);
     RegisterCreatureAI(npc_minigob_escape_robot);
 
     RegisterSpellScript(spell_minigob_escape_teleport_random);
