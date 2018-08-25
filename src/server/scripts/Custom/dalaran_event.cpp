@@ -174,7 +174,7 @@ struct npc_minigob_escape_trigger : public ScriptedAI
         {
             for (auto itr = _foundPlayers.begin(); itr != _foundPlayers.end();)
             {
-                Player* player = ObjectAccessor::GetPlayer(*me, *itr);
+                Player* player = ObjectAccessor::FindConnectedPlayer(*itr);
                 if (!player)
                 {
                     itr = _foundPlayers.erase(itr);
@@ -322,7 +322,7 @@ struct npc_minigob_escape_rhonin : public ScriptedAI
         {
             for (auto itr = _foundPlayers.begin(); itr != _foundPlayers.end();)
             {
-                Player* player = ObjectAccessor::GetPlayer(*me, *itr);
+                Player* player = ObjectAccessor::FindConnectedPlayer(*itr);
                 if (!player)
                 {
                     itr = _foundPlayers.erase(itr);
