@@ -15,7 +15,7 @@ SET @ENTRY := 44000;
 SET @CGUID := 400000;
 DELETE FROM `creature` WHERE `guid` BETWEEN @CGUID AND @CGUID+39;
 INSERT INTO `creature` (`guid`, `id`, `map`, `zoneId`, `areaId`, `spawnMask`, `phaseMask`, `modelid`, `equipment_id`, `position_x`, `position_y`, `position_z`, `orientation`, `spawntimesecs`, `spawndist`, `currentwaypoint`, `curhealth`, `curmana`, `MovementType`, `npcflag`, `unit_flags`, `dynamicflags`, `VerifiedBuild`) VALUES
-(@CGUID+00, @ENTRY+02,   0,   1,   1,  1, 4294967295, 0, 0, -5101.29, -1758.39,  497.84, 4.09, 604800, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+(@CGUID+00, @ENTRY+02,   0,   1,   1,  1,       4097, 0, 0, -5101.29, -1758.39,  497.84, 4.09, 604800, 0, 0, 0, 0, 0, 0, 0, 0, 0),
 (@CGUID+01, @ENTRY+03,   1, 876, 876,  1,          1, 0, 0,  16222.1,  16398.9,   -64.8,  0.6, 604800, 0, 0, 0, 0, 0, 0, 0, 0, 0),
 (@CGUID+02, @ENTRY+04,   1, 440, 1940, 1,          2, 0, 0,  -8826.9,  -4755.8,     1.9,  6.2, 604800, 0, 0, 0, 0, 0, 0, 0, 0, 0),
 (@CGUID+03, @ENTRY+05, 571, 210, 4522, 1,          2, 0, 0,   5651.1,   2018.4,  1544.1,  4.8, 604800, 0, 0, 0, 0, 0, 0, 0, 0, 0),

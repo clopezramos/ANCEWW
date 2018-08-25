@@ -46,9 +46,10 @@
 #include "SpellScript.h"
 #include "Unit.h"
 #include "UnitAI.h"
+#include <cmath>
 #include <functional>
 #include <list>
-#include <unordered_map>
+#include <map>
 #include <unordered_set>
 #include <vector>
 
@@ -95,6 +96,9 @@ enum MinigobEscapeEvents
     // Trigger
     EVENT_MINIGOB_ESCAPE_TRIGGER_SEARCH_TARGETS = 1,
 
+    // Rhonin (Event)
+    EVENT_MINIGOB_ESCAPE_RHONIN_SEARCH_PLAYERS,
+
     // Robot
     EVENT_MINIGOB_ESCAPE_ROBOT_ENGAGE_COMBAT,
     EVENT_MINIGOB_ESCAPE_ROBOT_SEARCH_TARGETS,
@@ -103,21 +107,29 @@ enum MinigobEscapeEvents
     EVENT_MINIGOB_ESCAPE_ROBOT_REMOVE_TARGETS_IMMUNE_AURAS,
 };
 
-static uint32 const MinigobEscapePhase = 2;
+enum MinigobEscapeDataIds
+{
+    DATA_MINIGOB_ESCAPE_REMOVE_GROUP = 1,
+};
+
+static uint8 const MinigobEscapeMinimumPhaseBit = 12;
+static uint8 const MinigobEscapeMaximumPhaseBit = 31;
+static uint32 const MinigobEscapeMinimumPhase = std::pow(2u, MinigobEscapeMinimumPhaseBit);
+
 static WorldLocation const MinigobEscapeTeleportIn = { 0u, Position(-5114.554f, -1777.687f, 497.83578f, 1.15f) };
 static WorldLocation const MinigobEscapeTeleportOut = { 571u, Position(5789.215f, 770.495f, 661.28241f, 5.8f) };
 
-class MinigobEscapeRandomLocationPlayerSearcher
+class MinigobEscapePlayerSearcher
 {
     public:
-        MinigobEscapeRandomLocationPlayerSearcher(Unit const* source, float range) : _source(source), _range(range) { }
+        MinigobEscapePlayerSearcher(Unit const* source, float range, uint32 phaseMask) : _source(source), _range(range), _phaseMask(phaseMask) { }
 
         bool operator()(Player* player)
         {
             if (player->IsGameMaster())
                 return false;
 
-            if (player->IsInMap(_source) && player->IsWithinDist(_source, _range) && player->GetQuestStatus(QUEST_MINIGOB_ESCAPE) == QUEST_STATUS_INCOMPLETE && !player->InSamePhase(MinigobEscapePhase))
+            if (player->IsInMap(_source) && player->IsWithinDist(_source, _range) && player->GetQuestStatus(QUEST_MINIGOB_ESCAPE) == QUEST_STATUS_INCOMPLETE && !player->InSamePhase(_phaseMask))
             {
                 if (MinigobEscapePlayerInfo* info = player->_customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey))
                     if (info->Status == MINIGOBESCAPE_PLAYERINFO_STATUS_NONE)
@@ -129,7 +141,8 @@ class MinigobEscapeRandomLocationPlayerSearcher
 
     private:
         Unit const* _source;
-        float _range;
+        float const _range;
+        uint32 const _phaseMask;
 };
 
 struct npc_minigob_escape_trigger : public ScriptedAI
@@ -168,7 +181,7 @@ struct npc_minigob_escape_trigger : public ScriptedAI
                 if (!player->IsInMap(me) || !player->IsWithinDist(me, searchDistance) || player->GetQuestStatus(QUEST_MINIGOB_ESCAPE) != QUEST_STATUS_INCOMPLETE)
                 {
                     if (info->Status == MINIGOBESCAPE_PLAYERINFO_STATUS_RP)
-                        player->SetPhaseMask(player->GetPhaseMask() & ~MinigobEscapePhase, true);
+                        player->SetPhaseMask(player->GetPhaseMask() & ~MinigobEscapeMinimumPhase, true);
 
                     itr = _foundPlayers.erase(itr);
                 }
@@ -177,8 +190,8 @@ struct npc_minigob_escape_trigger : public ScriptedAI
             }
 
             std::list<Player*> players;
-            MinigobEscapeRandomLocationPlayerSearcher check(me, searchDistance);
-            Trinity::PlayerListSearcher<MinigobEscapeRandomLocationPlayerSearcher> searcher(me, players, check);
+            MinigobEscapePlayerSearcher check(me, searchDistance, MinigobEscapeMinimumPhase);
+            Trinity::PlayerListSearcher<MinigobEscapePlayerSearcher> searcher(me, players, check);
             Cell::VisitWorldObjects(me, searcher, searchDistance);
 
             for (Player* foundPlayer : players)
@@ -186,7 +199,7 @@ struct npc_minigob_escape_trigger : public ScriptedAI
                 if (MinigobEscapePlayerInfo* info = foundPlayer->_customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey))
                 {
                     _foundPlayers.insert(foundPlayer->GetGUID());
-                    foundPlayer->SetPhaseMask(foundPlayer->GetPhaseMask() | MinigobEscapePhase, true);
+                    foundPlayer->SetPhaseMask(foundPlayer->GetPhaseMask() | MinigobEscapeMinimumPhase, true);
                     info->Status = MINIGOBESCAPE_PLAYERINFO_STATUS_RP;
                 }
             }
@@ -212,6 +225,7 @@ struct npc_minigob_escape_rhonin : public ScriptedAI
 
     void Reset() override
     {
+        _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_RHONIN_SEARCH_PLAYERS, Milliseconds(1));
     }
 
     bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
@@ -279,24 +293,127 @@ struct npc_minigob_escape_rhonin : public ScriptedAI
         return true;
     }
 
+    void SetGUID(ObjectGuid const& guid, int32 id) override
+    {
+        switch (id)
+        {
+            case DATA_MINIGOB_ESCAPE_REMOVE_GROUP:
+                EndEncounter(guid);
+                break;
+            default:
+                break;
+        }
+    }
+
     void UpdateAI(uint32 diff) override
     {
         _events.Update(diff);
+        if (_events.ExecuteEvent() == EVENT_MINIGOB_ESCAPE_RHONIN_SEARCH_PLAYERS)
+        {
+            for (auto itr = _foundPlayers.begin(); itr != _foundPlayers.end();)
+            {
+                Player* player = ObjectAccessor::GetPlayer(*me, *itr);
+                if (!player)
+                {
+                    itr = _foundPlayers.erase(itr);
+                    continue;
+                }
+
+                MinigobEscapePlayerInfo* info = player->_customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey);
+                if (!info)
+                {
+                    itr = _foundPlayers.erase(itr);
+                    continue;
+                }
+
+                if (!player->IsInMap(me))
+                {
+                    if (info->Status == MINIGOBESCAPE_PLAYERINFO_STATUS_EVENT)
+                        ResetPlayerPhaseMask(player);
+
+                    itr = _foundPlayers.erase(itr);
+                }
+                else if (!player->IsWithinDist(me, searchDistance) || player->GetQuestStatus(QUEST_MINIGOB_ESCAPE) != QUEST_STATUS_INCOMPLETE)
+                {
+                    if (info->Status == MINIGOBESCAPE_PLAYERINFO_STATUS_EVENT)
+                        TeleportOut(player, info);
+
+                    itr = _foundPlayers.erase(itr);
+                }
+                else
+                    ++itr;
+            }
+
+            std::list<Player*> players;
+            MinigobEscapePlayerSearcher check(me, searchDistance + 50.f, MinigobEscapeMinimumPhase);
+            Trinity::PlayerListSearcher<MinigobEscapePlayerSearcher> searcher(me, players, check);
+            Cell::VisitWorldObjects(me, searcher, searchDistance + 50.f);
+
+            for (Player* foundPlayer : players)
+            {
+                if (!foundPlayer->IsWithinDistInMap(me, searchDistance))
+                {
+                    TeleportOut(foundPlayer);
+                    continue;
+                }
+
+                if (MinigobEscapePlayerInfo* info = foundPlayer->_customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey))
+                {
+                    _foundPlayers.insert(foundPlayer->GetGUID());
+                    foundPlayer->SetPhaseMask(MinigobEscapeMinimumPhase, true);
+                    info->Status = MINIGOBESCAPE_PLAYERINFO_STATUS_EVENT;
+                }
+            }
+
+            me->setActive(players.empty());
+
+            _events.Repeat(Seconds(1));
+        }
     }
 
 private:
-    bool IsGroupStored(ObjectGuid groupGuid) const
+    bool IsGroupStored(ObjectGuid const& groupGuid) const
     {
         return _encounters.find(groupGuid) != _encounters.end();
     }
 
-    void StartEncounter(Group* group) { }
-    void GetIntoEncounter(Group* group, Player* player) { }
+    uint32 GetFreePhaseMask() const
+    {
+        uint8 result = MinigobEscapeMinimumPhaseBit + 1u;
+        for (auto itr = _encounters.begin(); itr != _encounters.end() && result; ++itr)
+        {
+            if (result <= itr->second)
+                result = itr->second + 1;
 
-    void TeleportOut(Player* player)
+            if (result > MinigobEscapeMaximumPhaseBit)
+                result = 0;
+        }
+
+        return std::pow(2u, result);
+    }
+
+    void StartEncounter(Group const* group) { }
+    void GetIntoEncounter(Group const* group, Player const* player) { }
+    void EndEncounter(ObjectGuid const& groupGuid) { }
+
+    void ResetPlayerPhaseMask(Player* player)
     {
         if (!player)
             return;
+
+        player->SetGameMaster(false);
+    }
+
+    void TeleportOut(Player* player, MinigobEscapePlayerInfo const* info = nullptr)
+    {
+        if (!player)
+            return;
+
+        if (!info)
+            info = player->_customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey);
+
+        if (info && info->Status == MINIGOBESCAPE_PLAYERINFO_STATUS_EVENT)
+            ResetPlayerPhaseMask(player);
 
         Talk(SAY_MINIGOB_ESCAPE_RHONIN_OUT_0, player);
         DoCast(player, SPELL_MINIGOB_ESCAPE_TELEPORT_OUT);
@@ -306,7 +423,8 @@ private:
 
     EventMap _events;
     SummonList _summons;
-    std::unordered_map<ObjectGuid, uint32> _encounters;
+    std::map<ObjectGuid, uint8> _encounters;
+    std::unordered_set<ObjectGuid> _foundPlayers;
 };
 
 static uint32 const MinigobEscapeMechanicImmunityList = (1 << MECHANIC_SHIELD) | (1 << MECHANIC_INVULNERABILITY) | (1 << MECHANIC_IMMUNE_SHIELD);
