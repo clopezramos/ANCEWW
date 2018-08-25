@@ -425,7 +425,7 @@ private:
         if (!info)
             info = player->_customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey);
 
-        if (info && info->Status == MINIGOBESCAPE_PLAYERINFO_STATUS_EVENT)
+        if (info && info->Status != 0)
             ResetPlayerPhaseMask(player);
 
         Talk(SAY_MINIGOB_ESCAPE_RHONIN_OUT_0, player);
