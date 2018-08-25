@@ -204,7 +204,7 @@ struct npc_minigob_escape_trigger : public ScriptedAI
                 }
             }
 
-            me->setActive(players.empty() && _foundPlayers.empty());
+            me->setActive(!players.empty() || !_foundPlayers.empty());
 
             _events.Repeat(Seconds(1));
         }
@@ -365,7 +365,7 @@ struct npc_minigob_escape_rhonin : public ScriptedAI
                 }
             }
 
-            me->setActive(players.empty());
+            me->setActive(!players.empty());
 
             _events.Repeat(Seconds(1));
         }
