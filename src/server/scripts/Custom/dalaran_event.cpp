@@ -438,7 +438,7 @@ private:
         if (!group)
             return;
 
-        if (_encounters.find(group->GetGUID()) == _encounters.end())
+        if (_encounters.find(group->GetGUID()) != _encounters.end())
             return;
 
         uint8 phaseMaskBit = GetFreePhaseMaskBit();
