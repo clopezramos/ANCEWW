@@ -32,6 +32,7 @@
 #include "GroupReference.h"
 #include "Object.h"
 #include "ObjectAccessor.h"
+#include "ObjectDefines.h"
 #include "ObjectGuid.h"
 #include "Player.h"
 #include "Position.h"
@@ -45,6 +46,7 @@
 #include "SpellAuraEffects.h"
 #include "SpellInfo.h"
 #include "SpellScript.h"
+#include "TemporarySummon.h"
 #include "Unit.h"
 #include "UnitAI.h"
 #include <cmath>
