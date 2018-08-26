@@ -28,6 +28,7 @@
 #include "GossipDef.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
+#include "GroupMgr.h"
 #include "GroupReference.h"
 #include "Object.h"
 #include "ObjectAccessor.h"
@@ -110,14 +111,23 @@ enum MinigobEscapeEvents
 enum MinigobEscapeDataIds
 {
     DATA_MINIGOB_ESCAPE_REMOVE_GROUP = 1,
+    DATA_MINIGOB_ESCAPE_ADD_GROUP,
+};
+
+enum MinigobEscapeActionIds
+{
+    // Minigob
+    ACTION_MINIGOB_ESCAPE_MINIGOB_START = 1,
 };
 
 static uint8 const MinigobEscapeMinimumPhaseBit = 12;
 static uint8 const MinigobEscapeMaximumPhaseBit = 31;
 static uint32 const MinigobEscapeMinimumPhase = std::pow(2u, MinigobEscapeMinimumPhaseBit);
 
-static WorldLocation const MinigobEscapeTeleportIn = { 0u, Position(-5114.554f, -1777.687f, 497.83578f, 1.15f) };
-static WorldLocation const MinigobEscapeTeleportOut = { 571u, Position(5789.215f, 770.495f, 661.28241f, 5.8f) };
+static WorldLocation const MinigobEscapeTeleportInLocation = { 0u, Position(-5114.554f, -1777.687f, 497.83578f, 1.15f) };
+static WorldLocation const MinigobEscapeTeleportOutLocation = { 571u, Position(5789.215f, 770.495f, 661.28241f, 5.8f) };
+
+static Position const MinigobEscapeMinigobPosition = { -5106.3f, -1692.1f, 500.0f, 4.9f };
 
 class MinigobEscapePlayerSearcher
 {
@@ -139,7 +149,7 @@ class MinigobEscapePlayerSearcher
             if (_phaseMask && player->InSamePhase(_phaseMask))
                 return false;
 
-            if (MinigobEscapePlayerInfo* info = player->_customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey))
+            if (MinigobEscapePlayerInfo const* info = player->_customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey))
             {
                 if (info->Status == MINIGOBESCAPE_PLAYERINFO_STATUS_NONE)
                     return true;
@@ -181,7 +191,7 @@ struct npc_minigob_escape_trigger : public ScriptedAI
                     continue;
                 }
 
-                MinigobEscapePlayerInfo* info = player->_customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey);
+                MinigobEscapePlayerInfo const* info = player->_customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey);
                 if (!info)
                 {
                     itr = _foundPlayers.erase(itr);
@@ -241,7 +251,7 @@ struct npc_minigob_escape_rhonin : public ScriptedAI
     bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
     {
         uint32 const action = player->PlayerTalkClass->GetGossipOptionAction(gossipListId);
-        if (Group* group = player->GetGroup())
+        if (Group const* group = player->GetGroup())
         {
             switch (action)
             {
@@ -268,7 +278,7 @@ struct npc_minigob_escape_rhonin : public ScriptedAI
     {
         player->PlayerTalkClass->ClearMenus();
 
-        Group* group = player->GetGroup();
+        Group const* group = player->GetGroup();
         if (!group)
         {
             AddGossipItemFor(player, GOSSIP_MENU_MINIGOB_ESCAPE_RHONIN_0, 1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 3);
@@ -315,6 +325,16 @@ struct npc_minigob_escape_rhonin : public ScriptedAI
         }
     }
 
+    void JustSummoned(Creature* summon) override
+    {
+        _summons.Summon(summon);
+    }
+
+    void SummonedCreatureDespawn(Creature* summon) override
+    {
+        _summons.Despawn(summon);
+    }
+
     void UpdateAI(uint32 diff) override
     {
         _events.Update(diff);
@@ -329,7 +349,7 @@ struct npc_minigob_escape_rhonin : public ScriptedAI
                     continue;
                 }
 
-                MinigobEscapePlayerInfo* info = player->_customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey);
+                MinigobEscapePlayerInfo const* info = player->_customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey);
                 if (!info)
                 {
                     itr = _foundPlayers.erase(itr);
@@ -342,21 +362,29 @@ struct npc_minigob_escape_rhonin : public ScriptedAI
                         ResetPlayerPhaseMask(player);
 
                     itr = _foundPlayers.erase(itr);
+                    continue;
                 }
-                else if (!player->IsWithinDist(me, searchDistance) || player->GetQuestStatus(QUEST_MINIGOB_ESCAPE) != QUEST_STATUS_INCOMPLETE)
+
+                if (!player->IsWithinDist(me, searchDistance) || player->GetQuestStatus(QUEST_MINIGOB_ESCAPE) != QUEST_STATUS_INCOMPLETE)
                 {
                     if (info->Status != 0)
                     {
-                        if (Group* group = player->GetGroup())
+                        if (Group const* group = player->GetGroup())
                         {
                             if (!IsGroupStored(group->GetGUID()))
+                            {
                                 TeleportOut(player, info);
+                                itr = _foundPlayers.erase(itr);
+                            }
                         }
                         else
+                        {
                             TeleportOut(player, info);
+                            itr = _foundPlayers.erase(itr);
+                        }
                     }
-
-                    itr = _foundPlayers.erase(itr);
+                    else
+                        itr = _foundPlayers.erase(itr);
                 }
                 else
                     ++itr;
@@ -390,7 +418,7 @@ private:
         return _encounters.find(groupGuid) != _encounters.end();
     }
 
-    uint32 GetFreePhaseMask() const
+    uint8 GetFreePhaseMaskBit() const
     {
         uint8 result = MinigobEscapeMinimumPhaseBit + 1u;
         for (auto itr = _encounters.begin(); itr != _encounters.end() && result; ++itr)
@@ -402,12 +430,69 @@ private:
                 result = 0;
         }
 
-        return std::pow(2u, result);
+        return result;
     }
 
-    void StartEncounter(Group const* group) { }
-    void GetIntoEncounter(Group const* group, Player const* player) { }
-    void EndEncounter(ObjectGuid const& groupGuid) { }
+    void StartEncounter(Group const* group)
+    {
+        if (!group)
+            return;
+
+        if (_encounters.find(group->GetGUID()) == _encounters.end())
+            return;
+
+        uint8 phaseMaskBit = GetFreePhaseMaskBit();
+        if (phaseMaskBit <= MinigobEscapeMinimumPhaseBit)
+            return;
+
+        _encounters.emplace(group->GetGUID(), phaseMaskBit);
+
+        uint32 phaseMask = std::pow(2u, phaseMaskBit);
+
+        if (TempSummon* summon = me->SummonCreature(NPC_MINIGOB_ESCAPE_MINIGOB, MinigobEscapeMinigobPosition, TEMPSUMMON_MANUAL_DESPAWN))
+        {
+            summon->SetPhaseMask(phaseMask, true);
+            summon->AI()->SetGUID(group->GetGUID(), DATA_MINIGOB_ESCAPE_ADD_GROUP);
+            summon->AI()->DoAction(ACTION_MINIGOB_ESCAPE_MINIGOB_START);
+        }
+
+        for (auto itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
+        {
+            if (Player* member = itr->GetSource())
+                if (member->IsWithinDistInMap(me, 100.0f))
+                    member->SetPhaseMask(phaseMask, true);
+        }
+    }
+
+    void GetIntoEncounter(Group const* group, Player* player)
+    {
+        if (!group || !player)
+            return;
+
+        auto itr = _encounters.find(group->GetGUID());
+        if (itr != _encounters.end())
+            player->SetPhaseMask(itr->second, true);
+    }
+
+    void EndEncounter(ObjectGuid const& groupGuid)
+    {
+        _encounters.erase(groupGuid);
+
+        Group const* group = sGroupMgr->GetGroupByGUID(groupGuid);
+        if (!group)
+            return;
+
+        for (auto itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
+        {
+            if (Player* member = itr->GetSource())
+            {
+                if (!member->IsAlive())
+                    member->ResurrectPlayer(1.0f);
+
+                TeleportOut(member);
+            }
+        }
+    }
 
     void ResetPlayerPhaseMask(Player* player)
     {
@@ -563,7 +648,7 @@ struct npc_minigob_escape_robot : public ScriptedAI
                     _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_ROBOT_REMOVE_TARGETS_IMMUNE_AURAS, Seconds(1));
                     break;
                 case EVENT_MINIGOB_ESCAPE_ROBOT_ROOT_TARGETS:
-                    for (ObjectGuid targetGuid : _targets)
+                    for (ObjectGuid const& targetGuid : _targets)
                     {
                         if (Unit* target = ObjectAccessor::GetUnit(*me, targetGuid))
                             if (!target->HasAura(SPELL_MINIGOB_ESCAPE_ROBOT_MAGNETIC_FIELD))
@@ -581,7 +666,7 @@ struct npc_minigob_escape_robot : public ScriptedAI
                     _events.Repeat(Seconds(1));
                     break;
                 case EVENT_MINIGOB_ESCAPE_ROBOT_REMOVE_TARGETS_IMMUNE_AURAS:
-                    for (ObjectGuid targetGuid : _targets)
+                    for (ObjectGuid const& targetGuid : _targets)
                     {
                         if (Unit* target = ObjectAccessor::GetUnit(*me, targetGuid))
                             if (CheckAuras(target))
@@ -611,7 +696,7 @@ struct npc_minigob_escape_robot : public ScriptedAI
     }
 
 private:
-    bool CheckAuras(Unit* target)  const
+    bool CheckAuras(Unit const* target) const
     {
         if (target->HasAura(31224 /*ROGUE_CLOAK_OF_SHADOWS*/) || target->HasAura(65961 /*ROGUE_CLOAK_OF_SHADOWS*/))
             return true;
@@ -649,13 +734,13 @@ private:
         Cell::VisitAllObjects(me, searcher, combatDistance);
 
         _targets.clear();
-        for (Unit* foundTarget : targetsFound)
+        for (Unit const* foundTarget : targetsFound)
             _targets.push_back(foundTarget->GetGUID());
     }
 
     void EngageTargets()
     {
-        for (ObjectGuid targetGuid : _targets)
+        for (ObjectGuid const& targetGuid : _targets)
         {
             if (Unit* target = ObjectAccessor::GetUnit(*me, targetGuid))
                 AttackStart(target);
@@ -704,12 +789,12 @@ class spell_minigob_escape_teleport_random : public SpellScript
             return;
         }
 
-        Group* group = target->GetGroup();
+        Group const* group = target->GetGroup();
         if (!group)
             return;
 
         bool valid = false;
-        for (GroupReference* itr = group->GetFirstMember(); itr != nullptr && !valid; itr = itr->next())
+        for (auto itr = group->GetFirstMember(); itr != nullptr && !valid; itr = itr->next())
         {
             if (Player* member = itr->GetSource())
                 if (member->GetQuestStatus(QUEST_MINIGOB_ESCAPE) == QUEST_STATUS_INCOMPLETE)
@@ -719,7 +804,7 @@ class spell_minigob_escape_teleport_random : public SpellScript
         if (!valid)
             return;
 
-        for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
+        for (auto itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
         {
             if (Player* member = itr->GetSource())
                 if (member->IsAlive() && member->IsWithinDistInMap(GetCaster(), GetSpellInfo()->GetMaxRange()))
@@ -757,7 +842,7 @@ class spell_minigob_escape_teleport_in : public SpellScript
         if (!target)
             return;
 
-        target->TeleportTo(MinigobEscapeTeleportIn);
+        target->TeleportTo(MinigobEscapeTeleportInLocation);
     }
 
     void Register() override
@@ -790,7 +875,7 @@ class spell_minigob_escape_teleport_out : public SpellScript
         if (!target)
             return;
 
-        target->TeleportTo(MinigobEscapeTeleportOut);
+        target->TeleportTo(MinigobEscapeTeleportOutLocation);
     }
 
     void Register() override
@@ -885,10 +970,10 @@ class condition_minigob_event_in_group : public ConditionScript
 
         bool OnConditionCheck(Condition const* condition, ConditionSourceInfo& sourceInfo) override
         {
-            WorldObject* target = sourceInfo.mConditionTargets[condition->ConditionTarget];
-            if (Player* player = target->ToPlayer())
+            WorldObject const* target = sourceInfo.mConditionTargets[condition->ConditionTarget];
+            if (Player const* player = target->ToPlayer())
             {
-                if (Group* group = player->GetGroup())
+                if (Group const* group = player->GetGroup())
                     if (!group->isRaidGroup() && group->GetMembersCount() >= 3)
                         return true;
 
@@ -907,10 +992,10 @@ class condition_minigob_event_in_raid : public ConditionScript
 
         bool OnConditionCheck(Condition const* condition, ConditionSourceInfo& sourceInfo) override
         {
-            WorldObject* target = sourceInfo.mConditionTargets[condition->ConditionTarget];
-            if (Player* player = target->ToPlayer())
+            WorldObject const* target = sourceInfo.mConditionTargets[condition->ConditionTarget];
+            if (Player const* player = target->ToPlayer())
             {
-                if (Group* group = player->GetGroup())
+                if (Group const* group = player->GetGroup())
                     if (group->isRaidGroup())
                         return true;
             }
@@ -926,13 +1011,13 @@ class condition_minigob_event_alone : public ConditionScript
 
         bool OnConditionCheck(Condition const* condition, ConditionSourceInfo& sourceInfo) override
         {
-            WorldObject* target = sourceInfo.mConditionTargets[condition->ConditionTarget];
-            if (Player* player = target->ToPlayer())
+            WorldObject const* target = sourceInfo.mConditionTargets[condition->ConditionTarget];
+            if (Player const* player = target->ToPlayer())
             {
                 if (player->IsGameMaster())
                     return false;
 
-                if (Group* group = player->GetGroup())
+                if (Group const* group = player->GetGroup())
                 {
                     if (group->GetMembersCount() < 3)
                         return true;
