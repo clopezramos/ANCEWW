@@ -1964,8 +1964,9 @@ struct npc_minigob_escape_robot : public ScriptedAI
                     _events.Repeat(Milliseconds(1));
                     break;
                 case EVENT_MINIGOB_ESCAPE_ROBOT_LASER_BARRAGE:
-                    if (ObjectGuid targetGuid = Trinity::Containers::SelectRandomContainerElement(_targets))
+                    if (!_targets.empty())
                     {
+                        ObjectGuid targetGuid = Trinity::Containers::SelectRandomContainerElement(_targets);
                         if (Unit* target = ObjectAccessor::GetUnit(*me, targetGuid))
                             if (!CheckAuras(target))
                                 DoCast(target, SPELL_MINIGOB_ESCAPE_ROBOT_LASER_BARRAGE);
