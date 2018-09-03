@@ -17,11 +17,13 @@
  */
 
 #include "CellImpl.h"
+#include "CombatManager.h"
 #include "Common.h"
 #include "ConditionMgr.h"
 #include "Containers.h"
 #include "Creature.h"
 #include "CreatureAI.h"
+#include "CreatureTextMgr.h"
 #include "CustomUtilities.h"
 #include "Duration.h"
 #include "EventMap.h"
@@ -30,6 +32,7 @@
 #include "Group.h"
 #include "GroupMgr.h"
 #include "GroupReference.h"
+#include "MotionMaster.h"
 #include "Object.h"
 #include "ObjectAccessor.h"
 #include "ObjectDefines.h"
@@ -44,15 +47,21 @@
 #include "SharedDefines.h"
 #include "SpellAuraDefines.h"
 #include "SpellAuraEffects.h"
+#include "SpellAuras.h"
 #include "SpellInfo.h"
 #include "SpellScript.h"
 #include "TemporarySummon.h"
+#include "ThreatManager.h"
 #include "Unit.h"
 #include "UnitAI.h"
+#include <algorithm>
+#include <boost/numeric/conversion/cast.hpp>
 #include <cmath>
 #include <functional>
+#include <iterator>
 #include <list>
 #include <map>
+#include <type_traits>
 #include <unordered_set>
 #include <vector>
 
@@ -337,6 +346,13 @@ enum MinigobEscapeEventGroups
     EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_END
 };
 
+enum MinigobEscapePointIds
+{
+    POINT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_0 = 1,
+    POINT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_3,
+    POINT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_1_2
+};
+
 enum MinigobEscapeDataIds
 {
     DATA_MINIGOB_ESCAPE_COLDFLAME_GUID = 0,
@@ -355,7 +371,7 @@ enum MinigobEscapeActionIds
 
 static uint8 const MinigobEscapeMinimumPhaseBit = 12u;
 static uint8 const MinigobEscapeMaximumPhaseBit = 31u;
-static uint32 const MinigobEscapeMinimumPhase = std::pow(2u, MinigobEscapeMinimumPhaseBit);
+static uint32 const MinigobEscapeMinimumPhase = boost::numeric_cast<uint32, double>(std::pow(2u, MinigobEscapeMinimumPhaseBit));
 static float const MinigobEscapePlayersOrientation = 4.57f;
 
 static WorldLocation const MinigobEscapeTeleportInLocation = { 0u, Position(-5114.554f, -1777.687f, 497.83578f, 1.15f) };
@@ -691,7 +707,7 @@ private:
 
         _encounters.emplace(group->GetGUID(), phaseMaskBit);
 
-        uint32 phaseMask = std::pow(2u, phaseMaskBit);
+        uint32 phaseMask = boost::numeric_cast<uint32, double>(std::pow(2u, phaseMaskBit));
 
         if (TempSummon* summon = me->SummonCreature(NPC_MINIGOB_ESCAPE_MINIGOB, MinigobEscapeMinigobPosition, TEMPSUMMON_MANUAL_DESPAWN))
         {
@@ -722,7 +738,7 @@ private:
     {
         _encounters.erase(groupGuid);
 
-        Group const* group = sGroupMgr->GetGroupByGUID(groupGuid);
+        Group const* group = sGroupMgr->GetGroupByGUID(groupGuid.GetCounter());
         if (!group)
             return;
 
@@ -769,27 +785,527 @@ private:
     std::unordered_set<ObjectGuid> _foundPlayers;
 };
 
+class MinigobEscapeMinigobPlayerSearcher
+{
+    public:
+        MinigobEscapeMinigobPlayerSearcher(WorldObject const* object, float range, bool requireAlive = true, uint32 questId = 0) : _object(object), _range(range), _requireAlive(requireAlive), _questId(questId) { }
+
+        bool operator()(Player* player) const
+        {
+            if (player->IsGameMaster())
+                return false;
+
+            if (_requireAlive && !player->IsAlive())
+                return false;
+
+            if (!player->IsWithinDistInMap(_object, _range))
+                return false;
+
+            if (_questId && player->GetQuestStatus(_questId) != QUEST_STATUS_INCOMPLETE)
+                return false;
+
+            return true;
+        }
+
+    private:
+        WorldObject const* _object;
+        float const _range;
+        bool const _requireAlive;
+        uint32 const _questId;
+};
+
 struct boss_minigob_escape : public ScriptedAI
 {
-    boss_minigob_escape(Creature* creature) : ScriptedAI(creature), _summons(creature)
+    boss_minigob_escape(Creature* creature) : ScriptedAI(creature), _summons(creature), _previousPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_IDLE), _checkVanish(false), _completed(false)
     {
+        creature->setActive(true);
+        creature->SetFarVisible(true);
+
+        DoCast(SPELL_MINIGOB_ESCAPE_MINIGOB_EVOCATE);
+    }
+
+    void IsSummonedBy(Unit* summoner) override
+    {
+        _summonerGUID = summoner->GetGUID();
     }
 
     void Reset() override
     {
+        _events.Reset();
+        _events.SetPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_IDLE);
+        _summons.DespawnAll();
+
+        me->SetReactState(REACT_PASSIVE);
+        me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+        me->SetImmuneToAll(true, false);
+    }
+
+    void JustSummoned(Creature* summon) override
+    {
+        _summons.Summon(summon);
+        switch (summon->GetEntry())
+        {
+            case NPC_MINIGOB_ESCAPE_MINIGOB_COPY:
+                summon->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                summon->SetImmuneToAll(false);
+            case NPC_MINIGOB_ESCAPE_FROST_ELEMENTAL:
+            case NPC_MINIGOB_ESCAPE_FIRE_ELEMENTAL:
+                _EngageGroup(summon);
+                break;
+            case NPC_MINIGOB_ESCAPE_RHONIN_ENCOUNTER:
+                _rhoninGUID = summon->GetGUID();
+                summon->SetWalk(true);
+                break;
+                default:
+                    break;
+        }
+    }
+
+    void SummonedCreatureDespawn(Creature* summon) override
+    {
+        _summons.Despawn(summon);
+    }
+
+    void SummonedCreatureDies(Creature* summon, Unit* /*killer*/) override
+    {
+        switch (summon->GetEntry())
+        {
+            case NPC_MINIGOB_ESCAPE_MINIGOB_COPY:
+                if (_events.IsInPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_ARCANE))
+                    _events.RescheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SUMMON, Seconds(25), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                break;
+            case NPC_MINIGOB_ESCAPE_FIRE_ELEMENTAL:
+                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FIRE_SUMMON, Minutes(1) + Seconds(30), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                break;
+            default:
+                break;
+        }
+    }
+
+    void SetGUID(ObjectGuid const& guid, int32 id) override
+    {
+        switch (id)
+        {
+            case DATA_MINIGOB_ESCAPE_COLDFLAME_GUID:
+                _coldflameTargetGUID = guid;
+                break;
+            case DATA_MINIGOB_ESCAPE_ADD_GROUP:
+                _groupGUID = guid;
+                break;
+            default:
+                break;
+        }
+    }
+
+    ObjectGuid GetGUID(int32 id) const override
+    {
+        switch (id)
+        {
+            case DATA_MINIGOB_ESCAPE_COLDFLAME_GUID:
+                return _coldflameTargetGUID;
+            default:
+                break;
+        }
+
+        return ObjectGuid::Empty;
+    }
+
+    void SetData(uint32 id, uint32 /*value*/) override
+    {
+        switch (id)
+        {
+            case DATA_MINIGOB_ESCAPE_RESUME_FROST_COMBAT:
+                me->SetReactState(REACT_AGGRESSIVE);
+                me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                _EngageGroup(me);
+                me->GetMotionMaster()->MoveChase(me->GetVictim(), 25.0f);
+                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_FROSTBOLT, Seconds(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_COLDFLAME, Seconds(15), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_FROSTBOLT_VOLLEY, Seconds(10), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_NOVA_0, Seconds(60), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                break;
+            default:
+                break;
+        }
+    }
+
+    void DoAction(int32 action) override
+    {
+        switch (action)
+        {
+            case ACTION_MINIGOB_ESCAPE_MINIGOB_START:
+                me->SummonCreature(NPC_MINIGOB_ESCAPE_ROBOT, MinigobEscapeRobotPosition, TEMPSUMMON_MANUAL_DESPAWN);
+                me->SummonCreature(NPC_MINIGOB_ESCAPE_ROBOT_TRIGGER, MinigobEscapeTriggerPosition, TEMPSUMMON_MANUAL_DESPAWN);
+                me->SummonCreature(NPC_MINIGOB_ESCAPE_RHONIN_TRIGGER, MinigobEscapeTriggerPosition, TEMPSUMMON_MANUAL_DESPAWN);
+                me->SummonCreature(NPC_MINIGOB_ESCAPE_RHONIN_ENCOUNTER, MinigobEscapeRhoninPosition, TEMPSUMMON_MANUAL_DESPAWN);
+
+                _events.SetPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_START, Seconds(3), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                break;
+            default:
+                break;
+        }
+    }
+
+    void MovementInform(uint32 type, uint32 id) override
+    {
+        if (type != POINT_MOTION_TYPE)
+            return;
+
+        switch (id)
+        {
+            case POINT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_0:
+                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_1, Seconds(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTERPHASE);
+                break;
+            case POINT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_3:
+                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_4, Seconds(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTERPHASE);
+                break;
+            case POINT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_1_2:
+                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_1_3, Seconds(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTERPHASE);
+                break;
+            default:
+                break;
+        }
+    }
+
+    void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+    {
+        if (_completed)
+            damage = 0;
+
+        if (!_completed && damage >= me->GetHealth())
+        {
+            _completed = true;
+            damage = 0;
+
+            me->InterruptNonMeleeSpells(true);
+            me->GetMotionMaster()->Clear();
+
+            _summons.DespawnEntry(NPC_MINIGOB_ESCAPE_FIRE_ELEMENTAL);
+
+            EnterEvadeMode(EVADE_REASON_OTHER);
+
+            _events.Reset();
+            _events.SetPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_END);
+            _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_END_0, Seconds(2), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_END);
+            Talk(SAY_MINIGOB_ESCAPE_MINIGOB_COMPLETED_0);
+        }
+    }
+
+    void KilledUnit(Unit* victim) override
+    {
+        if (victim->GetTypeId() != TYPEID_PLAYER)
+            return;
+
+        Talk(SAY_MINIGOB_ESCAPE_MINIGOB_SLAY_0);
+    }
+
+    void JustEngagedWith(Unit* who) override
+    {
+        if (_events.GetPhaseMask() == EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_INTRO)
+        {
+            _previousPhase = EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_ARCANE;
+            _events.SetPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_ARCANE);
+            _checkVanish = true;
+            _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_CHECK_PLAYERS, 1, EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_DEFAULT);
+            _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_BLAST, Seconds(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+            _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SILENCE_0, Seconds(5), Seconds(10), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+            _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_STORM, Seconds(5), Seconds(15), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+            _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_KNOCKUP, Seconds(3), Seconds(7), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+            _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SUMMON, Seconds(10), Seconds(20), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+            _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_HASTE, Seconds(10), Seconds(20), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+            _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_INFUSION, Seconds(5), Seconds(10), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+            _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SURGE_0, Seconds(40), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+        }
+    }
+
+    void AttackStart(Unit* who) override
+    {
+        AttackStartCaster(who, 25.0f);
+    }
+
+    void EnterEvadeMode(EvadeReason /*why*/) override
+    {
+        me->RemoveAllAurasExceptType(SPELL_AURA_CONTROL_VEHICLE, SPELL_AURA_CLONE_CASTER);
+        me->GetThreatManager().ClearAllThreat();
+        me->SetLootRecipient(nullptr);
+        me->ResetPlayerDamageReq();
+        me->SetLastDamagedTime(0);
+        me->SetCannotReachTarget(false);
+        me->DoNotReacquireTarget();
+
+        me->CombatStop(true);
+        me->SetReactState(REACT_PASSIVE);
+        me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+
+        if (!_completed)
+        {
+            Talk(SAY_MINIGOB_ESCAPE_MINIGOB_WIPE_0);
+            _events.Reset();
+            _events.SetPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_WIPE);
+            _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_WIPE, Seconds(3), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_DEFAULT);
+        }
     }
 
     void UpdateAI(uint32 diff) override
     {
+        if (!(_events.IsInPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_INTRO) || _events.IsInPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_END) || _events.IsInPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_INTERPHASE) || _events.IsInPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_WIPE)))
+        {
+            if (!UpdateVictim())
+                return;
+        }
+
+        if ((_events.IsInPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_ARCANE) && !HealthAbovePct(75)) || (_events.IsInPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_FROST) && !HealthAbovePct(30)))
+        {
+            me->InterruptNonMeleeSpells(true);
+            me->GetMotionMaster()->Clear();
+            me->SetReactState(REACT_PASSIVE);
+            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+            _events.CancelEventGroup(EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+            _checkVanish = false;
+            _events.SetPhase(EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTERPHASE);
+            _SheepAllTargets();
+
+            if (_previousPhase == EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_ARCANE)
+            {
+                _summons.DespawnEntry(NPC_MINIGOB_ESCAPE_MINIGOB_COPY);
+                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_0, Seconds(2), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTERPHASE);
+            }
+            else if (_previousPhase == EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_FROST)
+            {
+                Talk(SAY_MINIGOB_ESCAPE_MINIGOB_THINK_0);
+                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_1_0, Seconds(3), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTERPHASE);
+            }
+        }
+
         _events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = _events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+                default:
+                    break;
+            }
+
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
+        }
     }
 
 private:
-    float const searchDistance = 50.0f;
+    Creature* _GetRhonin() const
+    {
+        return ObjectAccessor::GetCreature(*me, _rhoninGUID);
+    }
+
+    Creature* _GetSummon(uint32 entry) const
+    {
+        Creature* value = nullptr;
+        for (auto itr = _summons.begin(); itr != _summons.end() && value == nullptr; ++itr)
+        {
+            if (Creature* summon = ObjectAccessor::GetCreature(*me, *itr))
+                if (summon->GetEntry() == entry)
+                    value = summon;
+        }
+
+        return value;
+    }
+
+    bool _EngageGroup(Creature* who)
+    {
+        if (!who)
+            return false;
+
+        if (!who->HasReactState(REACT_PASSIVE) && !who->GetVictim())
+        {
+            if (Unit* nearTarget = who->SelectNearestTarget(_searchDistance))
+                me->EngageWithTarget(nearTarget);
+        }
+
+        std::list<Player*> foundPlayers;
+        MinigobEscapeMinigobPlayerSearcher check(me, _searchDistance);
+        Trinity::PlayerListSearcher<MinigobEscapeMinigobPlayerSearcher> searcher(me, foundPlayers, check);
+        Cell::VisitWorldObjects(me, searcher, _searchDistance);
+
+        for (Player* player : foundPlayers)
+        {
+            if (!CombatManager::CanBeginCombat(who, player))
+                continue;
+
+            who->EngageWithTarget(player);
+            for (Unit* pet : player->m_Controlled)
+                who->EngageWithTarget(pet);
+            if (Unit* vehicle = player->GetVehicleBase())
+                who->EngageWithTarget(vehicle);
+        }
+
+        return me->IsInCombat();
+    }
+
+    void _Summon(uint32 entry)
+    {
+        me->SummonCreature(entry, me->GetNearPosition(3.f, float(M_PI) / 2.f), TEMPSUMMON_CORPSE_TIMED_DESPAWN, Seconds(5));
+    }
+
+    void _SearchPlayers()
+    {
+        std::list<Player*> foundPlayers;
+        MinigobEscapeMinigobPlayerSearcher check(me, _searchDistance, true, QUEST_MINIGOB_ESCAPE);
+        Trinity::PlayerListSearcher<MinigobEscapeMinigobPlayerSearcher> searcher(me, foundPlayers, check);
+        Cell::VisitWorldObjects(me, searcher, _searchDistance);
+
+        _foundPlayers.clear();
+        std::transform(foundPlayers.begin(), foundPlayers.end(), std::inserter(_foundPlayers, std::end(_foundPlayers)), [] (Player* player)
+        {
+            return player->GetGUID();
+        });
+    }
+
+    void _SheepAllTargets()
+    {
+        std::list<Player*> foundPlayers;
+        MinigobEscapeMinigobPlayerSearcher check(me, _searchDistance);
+        Trinity::PlayerListSearcher<MinigobEscapeMinigobPlayerSearcher> searcher(me, foundPlayers, check);
+        Cell::VisitWorldObjects(me, searcher, _searchDistance);
+
+        for (Player* player : foundPlayers)
+        {
+            if (Aura* aura = player->GetAura(SPELL_MINIGOB_ESCAPE_MINIGOB_MANABONKED))
+            {
+                aura->SetMaxDuration(-1);
+                aura->SetDuration(-1);
+            }
+            else if (Aura* aura = me->AddAura(SPELL_MINIGOB_ESCAPE_MINIGOB_MANABONKED, player))
+            {
+                aura->SetMaxDuration(-1);
+                aura->SetDuration(-1);
+            }
+        }
+    }
+
+    void _RemoveSheeps()
+    {
+        std::list<Player*> foundPlayers;
+        MinigobEscapeMinigobPlayerSearcher check(me, _searchDistance);
+        Trinity::PlayerListSearcher<MinigobEscapeMinigobPlayerSearcher> searcher(me, foundPlayers, check);
+        Cell::VisitWorldObjects(me, searcher, _searchDistance);
+
+        for (Player* player : foundPlayers)
+        {
+            if (player->HasAura(SPELL_MINIGOB_ESCAPE_MINIGOB_MANABONKED))
+                player->RemoveAura(SPELL_MINIGOB_ESCAPE_MINIGOB_MANABONKED);
+        }
+    }
+
+    void _VanishPlayer(Player* player)
+    {
+        if (!player)
+            return;
+
+        Talk(SAY_MINIGOB_ESCAPE_MINIGOB_VANISH_0);
+        player->CastSpell(player, SPELL_MINIGOB_ESCAPE_MINIGOB_VANISH);
+        Unit::Kill(me, player);
+    }
+
+    void _VanishPlayer(GuidUnorderedSet playersGUIDs)
+    {
+        if (playersGUIDs.empty())
+            return;
+
+        Talk(SAY_MINIGOB_ESCAPE_MINIGOB_VANISH_1);
+
+        for (ObjectGuid playerGUID : playersGUIDs)
+        {
+            if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
+            {
+                player->CastSpell(player, SPELL_MINIGOB_ESCAPE_MINIGOB_VANISH);
+                Unit::Kill(me, player);
+            }
+        }
+    }
+
+    void _CheckVanish()
+    {
+        if (_foundPlayers.empty())
+            return;
+
+        if (_foundPlayers.size() > 5)
+            _VanishPlayer(_foundPlayers);
+
+        for (ObjectGuid playerGUID : _foundPlayers)
+        {
+            if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
+                if (player->IsAlive() && !player->IsWithinDistInMap(me, _searchDistance))
+                    _VanishPlayer(player);
+        }
+    }
+
+    void _ResurrectPlayer(Player* player)
+    {
+        if (!player)
+            return;
+
+        if (Creature* summon = _GetSummon(NPC_MINIGOB_ESCAPE_RHONIN_TRIGGER))
+        {
+            sCreatureTextMgr->SendChat(summon, SAY_MINIGOB_ESCAPE_RHONIN_TRIGGER_RESURRECT_0, player);
+            summon->CastSpell(player, SPELL_MINIGOB_ESCAPE_MINIGOB_REVIVE);
+        }
+    }
+
+    bool _SendResurrectPlayer(Player* player)
+    {
+        if (!player)
+            return false;
+
+        ObjectGuid playerGUID = player->GetGUID();
+        if (_resurrectedPlayers.find(playerGUID) == _resurrectedPlayers.end())
+        {
+            _resurrectedPlayers.insert(playerGUID);
+            _ResurrectPlayer(player);
+            return true;
+        }
+
+        return false;
+    }
+
+    bool _CheckWipe()
+    {
+        if (_foundPlayers.empty())
+            return true;
+/* TODO - Further develop resurrect logic
+        uint8 deadPlayers = 0;
+        for (ObjectGuid playerGUID : _foundPlayers)
+        {
+            if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
+                if (!player->IsAlive())
+                    if (!_SendResurrectPlayer(player))
+                        ++deadPlayers;
+        }
+
+        if (deadPlayers >= _foundPlayers.size())
+            return true;
+*/
+        return false;
+    }
+
+    float const _searchDistance = 100.0f;
 
     EventMap _events;
     SummonList _summons;
-    std::unordered_set<ObjectGuid> _foundPlayers;
+    GuidUnorderedSet _foundPlayers;
+    GuidUnorderedSet _resurrectedPlayers;
+    ObjectGuid _groupGUID;
+    ObjectGuid _summonerGUID;
+    ObjectGuid _rhoninGUID;
+    ObjectGuid _arcaneSurgeTargetGUID;
+    ObjectGuid _coldflameTargetGUID;
+    uint8 _previousPhase;
+    bool _checkVanish;
+    bool _completed;
 };
 
 static uint32 const MinigobEscapeMechanicImmunityList = (1 << MECHANIC_SHIELD) | (1 << MECHANIC_INVULNERABILITY) | (1 << MECHANIC_IMMUNE_SHIELD);
