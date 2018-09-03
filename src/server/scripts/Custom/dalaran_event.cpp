@@ -1939,11 +1939,11 @@ struct npc_minigob_escape_robot : public ScriptedAI
             switch (eventId)
             {
                 case EVENT_MINIGOB_ESCAPE_ROBOT_SEARCH_TARGETS:
-                    SearchTargets();
+                    _SearchTargets();
                     if (!_targets.empty())
-                        EngageTargets();
+                        _EngageTargets();
 
-                    if (_targets.empty() && me->IsInCombat())
+                    if (_targets.empty() && me->IsEngaged())
                         EnterEvadeMode(EvadeReason::EVADE_REASON_NO_HOSTILES);
                     else
                         _events.Repeat(Milliseconds(1));
@@ -1968,7 +1968,7 @@ struct npc_minigob_escape_robot : public ScriptedAI
                     {
                         ObjectGuid targetGuid = Trinity::Containers::SelectRandomContainerElement(_targets);
                         if (Unit* target = ObjectAccessor::GetUnit(*me, targetGuid))
-                            if (!CheckAuras(target))
+                            if (!_CheckAuras(target))
                                 DoCast(target, SPELL_MINIGOB_ESCAPE_ROBOT_LASER_BARRAGE);
                     }
                     _events.Repeat(Seconds(1));
@@ -1977,9 +1977,9 @@ struct npc_minigob_escape_robot : public ScriptedAI
                     for (ObjectGuid const& targetGuid : _targets)
                     {
                         if (Unit* target = ObjectAccessor::GetUnit(*me, targetGuid))
-                            if (CheckAuras(target))
+                            if (_CheckAuras(target))
                             {
-                                RemoveAuras(target);
+                                _RemoveAuras(target);
                                 Talk(SAY_MINIGOB_ESCAPE_ROBOT_REMOVE_0, target);
                             }
                     }
@@ -2004,7 +2004,7 @@ struct npc_minigob_escape_robot : public ScriptedAI
     }
 
 private:
-    bool CheckAuras(Unit const* target) const
+    bool _CheckAuras(Unit const* target) const
     {
         if (target->HasAura(31224 /*ROGUE_CLOAK_OF_SHADOWS*/) || target->HasAura(65961 /*ROGUE_CLOAK_OF_SHADOWS*/))
             return true;
@@ -2021,7 +2021,7 @@ private:
         return false;
     }
 
-    void RemoveAuras(Unit* target)
+    void _RemoveAuras(Unit* target)
     {
         if (target->HasAura(31224 /*ROGUE_CLOAK_OF_SHADOWS*/))
             target->RemoveAura(31224);
@@ -2034,24 +2034,27 @@ private:
             target->RemoveAurasByType(type);
     }
 
-    void SearchTargets()
+    void _SearchTargets()
     {
-        std::list<Unit*> targetsFound;
+        std::list<Unit*> foundTargets;
         MinigobEscapeRobotTargetSearcher check(me, combatDistance);
-        Trinity::UnitListSearcher<MinigobEscapeRobotTargetSearcher> searcher(me, targetsFound, check);
+        Trinity::UnitListSearcher<MinigobEscapeRobotTargetSearcher> searcher(me, foundTargets, check);
         Cell::VisitAllObjects(me, searcher, combatDistance);
 
         _targets.clear();
-        for (Unit const* foundTarget : targetsFound)
-            _targets.push_back(foundTarget->GetGUID());
+        std::transform(foundTargets.begin(), foundTargets.end(), std::inserter(_targets, std::end(_targets)), [] (Unit* unit)
+        {
+            return unit->GetGUID();
+        });
     }
 
-    void EngageTargets()
+    void _EngageTargets()
     {
         for (ObjectGuid const& targetGuid : _targets)
         {
-            if (Unit* target = ObjectAccessor::GetUnit(*me, targetGuid))
-                AttackStart(target);
+            Unit* target = ObjectAccessor::GetUnit(*me, targetGuid);
+            if (!me->IsEngagedBy(target))
+                me->EngageWithTarget(target);
         }
     }
 
