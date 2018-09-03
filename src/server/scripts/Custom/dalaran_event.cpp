@@ -324,7 +324,7 @@ enum MinigobEscapeEvents
 enum MinigobEscapeEventPhases
 {
     // Minigob
-    EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_IDLE = 1,
+    EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_IDLE = 0,
     EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_INTRO,
     EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_COMBAT,
     EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_INTERPHASE,
@@ -1087,6 +1087,254 @@ struct boss_minigob_escape : public ScriptedAI
         {
             switch (eventId)
             {
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_CHECK_PLAYERS:
+                    _SearchPlayers();
+                    if (_CheckWipe())
+                    {
+                        Talk(SAY_MINIGOB_ESCAPE_MINIGOB_WIPE_0);
+                        _events.Reset();
+                        _events.SetPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_WIPE);
+                        _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_WIPE, Seconds(3), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_DEFAULT);
+                    }
+                    else
+                    {
+                        if (_checkVanish)
+                            _CheckVanish();
+                        _events.Repeat(Seconds(2));
+                    }
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_START:
+                    if (Creature* rhonin = _GetRhonin())
+                        rhonin->GetMotionMaster()->MovePoint(0, MinigobEscapeIntroPostions[0]);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_0, Seconds(4), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_0:
+                    if (Creature* rhonin = _GetRhonin())
+                        rhonin->AI()->Talk(SAY_MINIGOB_ESCAPE_RHONIN_ENCOUNTER_BEGIN_0);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_1, Seconds(3), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_1:
+                    if (Creature* rhonin = _GetRhonin())
+                        rhonin->AI()->Talk(SAY_MINIGOB_ESCAPE_RHONIN_ENCOUNTER_BEGIN_1);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_2, Seconds(4), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_2:
+                    if (Creature* rhonin = _GetRhonin())
+                        rhonin->GetMotionMaster()->MovePoint(0, MinigobEscapeIntroPostions[1]);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_3, Seconds(10), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_3:
+                    if (Creature* rhonin = _GetRhonin())
+                        rhonin->AI()->Talk(SAY_MINIGOB_ESCAPE_RHONIN_ENCOUNTER_BEGIN_2);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_4, Seconds(7), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_4:
+                    if (Creature* rhonin = _GetRhonin())
+                        rhonin->AI()->Talk(SAY_MINIGOB_ESCAPE_RHONIN_ENCOUNTER_BEGIN_3);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_5, Seconds(7), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_5:
+                    if (Creature* rhonin = _GetRhonin())
+                        rhonin->AI()->Talk(SAY_MINIGOB_ESCAPE_RHONIN_ENCOUNTER_BEGIN_4);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_6, Seconds(5), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_6:
+                    if (Creature* rhonin = _GetRhonin())
+                        rhonin->AI()->Talk(SAY_MINIGOB_ESCAPE_RHONIN_ENCOUNTER_BEGIN_5);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_7, Seconds(5), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_7:
+                    if (Creature* rhonin = _GetRhonin())
+                        rhonin->AI()->Talk(SAY_MINIGOB_ESCAPE_RHONIN_ENCOUNTER_BEGIN_6);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_8, Seconds(4), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_8:
+                    if (Creature* rhonin = _GetRhonin())
+                        rhonin->AI()->Talk(SAY_MINIGOB_ESCAPE_RHONIN_ENCOUNTER_BEGIN_7);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_9, Seconds(4), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_9:
+                    if (Creature* rhonin = _GetRhonin())
+                        rhonin->AI()->Talk(SAY_MINIGOB_ESCAPE_RHONIN_ENCOUNTER_BEGIN_8);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_10, Seconds(3), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_10:
+                    if (Creature* rhonin = _GetRhonin())
+                        rhonin->GetMotionMaster()->MovePoint(0, MinigobEscapeIntroPostions[2]);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_11, Seconds(8), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_11:
+                    if (Creature* rhonin = _GetRhonin())
+                        rhonin->AI()->Talk(SAY_MINIGOB_ESCAPE_RHONIN_ENCOUNTER_BEGIN_9);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_12, Seconds(10), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_12:
+                    if (Creature* rhonin = _GetRhonin())
+                        rhonin->SetFacingTo(MinigobEscapePlayersOrientation);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_13, Seconds(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_13:
+                    if (Creature* rhonin = _GetRhonin())
+                        rhonin->AI()->Talk(SAY_MINIGOB_ESCAPE_RHONIN_ENCOUNTER_BEGIN_10);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_14, Seconds(5), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_14:
+                    if (Creature* rhonin = _GetRhonin())
+                        rhonin->AI()->Talk(SAY_MINIGOB_ESCAPE_RHONIN_ENCOUNTER_BEGIN_11);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_15, Seconds(3), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_15:
+                    if (Creature* rhonin = _GetRhonin())
+                    {
+                        rhonin->SetVisible(false);
+                        rhonin->GetMotionMaster()->MovePoint(0, MinigobEscapeRhoninPosition, true, rhonin->GetHomePosition().GetOrientation());
+                    }
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_16, Seconds(3), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_16:
+                    Talk(SAY_MINIGOB_ESCAPE_MINIGOB_ENGAGE_0);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_17, Seconds(3), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_17:
+                    me->SetFacingTo(MinigobEscapePlayersOrientation);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_18, Seconds(3), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_18:
+                    Talk(SAY_MINIGOB_ESCAPE_MINIGOB_ENGAGE_1);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_19, Seconds(5), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_19:
+                    Talk(SAY_MINIGOB_ESCAPE_MINIGOB_ENGAGE_2);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_20, Seconds(5), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_20:
+                    Talk(SAY_MINIGOB_ESCAPE_MINIGOB_ENGAGE_3);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_21, Seconds(7), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_21:
+                    Talk(SAY_MINIGOB_ESCAPE_MINIGOB_ENGAGE_4);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_22, Seconds(6), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_22:
+                    Talk(SAY_MINIGOB_ESCAPE_MINIGOB_ENGAGE_5);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_23, Seconds(7), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_23:
+                    Talk(SAY_MINIGOB_ESCAPE_MINIGOB_ENGAGE_6);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_24, Seconds(3), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_24:
+                    Talk(SAY_MINIGOB_ESCAPE_MINIGOB_ENGAGE_7);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_25, Seconds(3), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_25:
+                    Talk(SAY_MINIGOB_ESCAPE_MINIGOB_ENGAGE_8);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_ENGAGE, Seconds(3), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_ENGAGE:
+                    me->SetReactState(REACT_AGGRESSIVE);
+                    me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                    me->SetImmuneToAll(false);
+
+                    if (!_EngageGroup(me))
+                    {
+                        Talk(SAY_MINIGOB_ESCAPE_MINIGOB_WIPE_0);
+                        _events.Reset();
+                        _events.SetPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_WIPE);
+                        _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_WIPE, Seconds(3), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_DEFAULT);
+                    }
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SILENCE_0:
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 1, 50.0f, true))
+                    {
+                        _events.DelayEvents(Seconds(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                        DoCast(target, SPELL_MINIGOB_ESCAPE_MINIGOB_BLINK_NEAR_TARGET);
+                        _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SILENCE_1, 1, EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                    }
+                    else
+                        _events.Repeat(Seconds(30));
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SILENCE_1:
+                    Talk(SAY_MINIGOB_ESCAPE_MINIGOB_SPELL_1);
+                    DoCast(me, SPELL_MINIGOB_ESCAPE_MINIGOB_ARCANE_BURST, true);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SILENCE_0, Seconds(30), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_STORM:
+                    DoCastAOE(SPELL_MINIGOB_ESCAPE_MINIGOB_ARCANE_STORM);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_STORM, Seconds(15), Seconds(25), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_KNOCKUP:
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 40.0f, true))
+                        DoCast(target, SPELL_MINIGOB_ESCAPE_MINIGOB_ARCANE_KNOCKUP);
+
+                    _events.Repeat(Seconds(5), Seconds(10));
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_BLAST:
+                    DoCastVictim(SPELL_MINIGOB_ESCAPE_MINIGOB_ARCANE_BLAST);
+                    _events.Repeat(Seconds(3), Seconds(7));
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SUMMON:
+                {
+                    uint8 count = 0;
+                    for (auto itr = _summons.begin(); itr != _summons.end(); ++itr)
+                    {
+                        if (Creature* summ = ObjectAccessor::GetCreature(*me, *itr))
+                            if (summ->GetEntry() == NPC_MINIGOB_ESCAPE_MINIGOB_COPY)
+                                ++count;
+                    }
+                    if (count < 2)
+                        me->SummonCreature(NPC_MINIGOB_ESCAPE_MINIGOB_COPY, me->GetRandomNearPosition(10.0f), TEMPSUMMON_CORPSE_TIMED_DESPAWN, Seconds(5));
+                    _events.Repeat(Seconds(30));
+                    break;
+                }
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_HASTE:
+                    Talk(SAY_MINIGOB_ESCAPE_MINIGOB_SPELL_3);
+                    DoCast(SPELL_MINIGOB_ESCAPE_MINIGOB_ARCANE_HASTE);
+                    _events.Repeat(Seconds(20), Seconds(40));
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_INFUSION:
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 1, 40.0f, true))
+                        DoCast(target, SPELL_MINIGOB_ESCAPE_MINIGOB_ARCANE_INFUSION);
+                    _events.Repeat(Seconds(10), Seconds(20));
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SURGE_0:
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 1, 50.0f, true, -SPELL_MINIGOB_ESCAPE_MINIGOB_MANABONKED))
+                    {
+                        Talk(SAY_MINIGOB_ESCAPE_MINIGOB_SPELL_2, target);
+                        _arcaneSurgeTargetGUID = target->GetGUID();
+                        _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SURGE_1, Seconds(10), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                    }
+                    else
+                        _events.Repeat(Seconds(45));
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SURGE_1:
+                    if (Unit* target = ObjectAccessor::GetUnit(*me, _arcaneSurgeTargetGUID))
+                    {
+                        if (!target->HasAura(SPELL_MINIGOB_ESCAPE_MINIGOB_MANABONKED))
+                        {
+                            Talk(SAY_MINIGOB_ESCAPE_MINIGOB_SPELL_5, target);
+                            _events.DelayEvents(Seconds(12), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                            me->GetMotionMaster()->Clear();
+                            _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SURGE_2, Seconds(11), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                        }
+                        else
+                            _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SURGE_0, Seconds(40), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                    }
+                    else
+                        _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SURGE_0, Seconds(40), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SURGE_2:
+                    me->GetMotionMaster()->MoveChase(me->GetVictim(), 25.0f);
+                    if (Unit* target = ObjectAccessor::GetUnit(*me, _arcaneSurgeTargetGUID))
+                    {
+                        if (!target->HasAura(SPELL_MINIGOB_ESCAPE_MINIGOB_MANABONKED))
+                        {
+                            Talk(SAY_MINIGOB_ESCAPE_MINIGOB_SPELL_4);
+                            DoCast(target, SPELL_MINIGOB_ESCAPE_MINIGOB_ARCANE_SURGE);
+                        }
+                    }
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SURGE_0, Minutes(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                    break;
                 default:
                     break;
             }
