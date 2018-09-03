@@ -832,7 +832,6 @@ struct boss_minigob_escape : public ScriptedAI
     void Reset() override
     {
         _events.Reset();
-        _events.SetPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_IDLE);
         _summons.DespawnAll();
 
         me->SetReactState(REACT_PASSIVE);
@@ -917,8 +916,8 @@ struct boss_minigob_escape : public ScriptedAI
             case DATA_MINIGOB_ESCAPE_RESUME_FROST_COMBAT:
                 me->SetReactState(REACT_AGGRESSIVE);
                 me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
-                _EngageGroup(me);
-                me->GetMotionMaster()->MoveChase(me->GetVictim(), 25.0f);
+                if (_EngageGroup(me))
+                    me->GetMotionMaster()->MoveChase(me->GetVictim(), 25.0f);
                 _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_FROSTBOLT, Seconds(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
                 _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_COLDFLAME, Seconds(15), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
                 _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_FROSTBOLT_VOLLEY, Seconds(10), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
@@ -940,6 +939,7 @@ struct boss_minigob_escape : public ScriptedAI
                 me->SummonCreature(NPC_MINIGOB_ESCAPE_RHONIN_ENCOUNTER, MinigobEscapeRhoninPosition, TEMPSUMMON_MANUAL_DESPAWN);
 
                 _events.SetPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_INTRO);
+                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_CHECK_PLAYERS, 1, EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_DEFAULT);
                 _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_START, Seconds(3), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
                 break;
             default:
@@ -1000,14 +1000,13 @@ struct boss_minigob_escape : public ScriptedAI
         Talk(SAY_MINIGOB_ESCAPE_MINIGOB_SLAY_0);
     }
 
-    void JustEngagedWith(Unit* who) override
+    void JustEngagedWith(Unit* /*who*/) override
     {
         if (_events.GetPhaseMask() == EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_INTRO)
         {
             _previousPhase = EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_ARCANE;
             _events.SetPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_ARCANE);
             _checkVanish = true;
-            _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_CHECK_PLAYERS, 1, EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_DEFAULT);
             _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_BLAST, Seconds(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
             _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SILENCE_0, Seconds(5), Seconds(10), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
             _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_STORM, Seconds(5), Seconds(15), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
@@ -1245,7 +1244,7 @@ struct boss_minigob_escape : public ScriptedAI
                     }
                     break;
                 case EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SILENCE_0:
-                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 1, 50.0f, true))
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 50.0f, true, false))
                     {
                         _events.DelayEvents(Seconds(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
                         DoCast(target, SPELL_MINIGOB_ESCAPE_MINIGOB_BLINK_NEAR_TARGET);
@@ -1293,12 +1292,12 @@ struct boss_minigob_escape : public ScriptedAI
                     _events.Repeat(Seconds(20), Seconds(40));
                     break;
                 case EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_INFUSION:
-                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 1, 40.0f, true))
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 40.0f, true, false))
                         DoCast(target, SPELL_MINIGOB_ESCAPE_MINIGOB_ARCANE_INFUSION);
                     _events.Repeat(Seconds(10), Seconds(20));
                     break;
                 case EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SURGE_0:
-                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 1, 50.0f, true, -SPELL_MINIGOB_ESCAPE_MINIGOB_MANABONKED))
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 50.0f, true, true, -SPELL_MINIGOB_ESCAPE_MINIGOB_MANABONKED))
                     {
                         Talk(SAY_MINIGOB_ESCAPE_MINIGOB_SPELL_2, target);
                         _arcaneSurgeTargetGUID = target->GetGUID();
@@ -1324,7 +1323,8 @@ struct boss_minigob_escape : public ScriptedAI
                         _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SURGE_0, Seconds(40), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
                     break;
                 case EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SURGE_2:
-                    me->GetMotionMaster()->MoveChase(me->GetVictim(), 25.0f);
+                    if (me->IsEngaged())
+                        me->GetMotionMaster()->MoveChase(me->GetVictim(), 25.0f);
                     if (Unit* target = ObjectAccessor::GetUnit(*me, _arcaneSurgeTargetGUID))
                     {
                         if (!target->HasAura(SPELL_MINIGOB_ESCAPE_MINIGOB_MANABONKED))
@@ -1334,6 +1334,86 @@ struct boss_minigob_escape : public ScriptedAI
                         }
                     }
                     _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SURGE_0, Minutes(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_0:
+                    Talk(SAY_MINIGOB_ESCAPE_MINIGOB_HELP_0);
+                    me->GetMotionMaster()->MovePoint(POINT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_0, MinigobEscapeInterphasePostion, true, MinigobEscapeInterphasePostion.GetOrientation());
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_1:
+                    if (Creature* robot = _GetSummon(NPC_MINIGOB_ESCAPE_ROBOT_TRIGGER))
+                        robot->AI()->Talk(SAY_MINIGOB_ESCAPE_ROBOT_TRIGGER_ANSWER_0);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_2, Seconds(4), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTERPHASE);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_2:
+                    Talk(SAY_MINIGOB_ESCAPE_MINIGOB_HELP_1);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_3, Seconds(8), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTERPHASE);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_3:
+                    me->GetMotionMaster()->MovePoint(POINT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_3, MinigobEscapeMinigobPosition, true, MinigobEscapeMinigobPosition.GetOrientation());
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_4:
+                    Talk(SAY_MINIGOB_ESCAPE_MINIGOB_HELP_2);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_5, Seconds(5), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTERPHASE);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_5:
+                    Talk(SAY_MINIGOB_ESCAPE_MINIGOB_HELP_3);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_6, Seconds(7), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTERPHASE);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_INTERPHASE_0_6:
+                    _Summon(NPC_MINIGOB_ESCAPE_FROST_ELEMENTAL);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_END_INTERPHASE, Seconds(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTERPHASE);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_COLDFLAME:
+                    _coldflameTargetGUID.Clear();
+                    DoCastAOE(SPELL_MINIGOB_ESCAPE_MINIGOB_FROST_COLDFLAME);
+                    _events.Repeat(Seconds(3), Seconds(5));
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_FROSTBOLT:
+                    DoCastVictim(SPELL_MINIGOB_ESCAPE_MINIGOB_FROST_FROSTBOLT);
+                    _events.Repeat(Seconds(3), Seconds(5));
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_FROSTBOLT_VOLLEY:
+                    DoCastAOE(SPELL_MINIGOB_ESCAPE_MINIGOB_FROST_FROSTBOLT_VOLLEY);
+                    _events.Repeat(Seconds(3), Seconds(5));
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_NOVA_0:
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 50.0f, true))
+                    {
+                        _events.DelayEvents(Seconds(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                        DoCast(target, SPELL_MINIGOB_ESCAPE_MINIGOB_BLINK_NEAR_TARGET);
+                        _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_NOVA_1, 1, EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                    }
+                    else
+                        _events.Repeat(Seconds(20));
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_NOVA_1:
+                    Talk(SAY_MINIGOB_ESCAPE_MINIGOB_SPELL_6);
+                    DoCastAOE(SPELL_MINIGOB_ESCAPE_MINIGOB_FROST_NOVA, true);
+                    DoCastAOE(SPELL_MINIGOB_ESCAPE_MINIGOB_FROST_BLISTERING_COLD);
+                    _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_NOVA_0, Seconds(60), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                    break;
+                case EVENT_MINIGOB_ESCAPE_MINIGOB_END_INTERPHASE:
+                    _events.CancelEventGroup(EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTERPHASE);
+                    _checkVanish = true;
+                    _RemoveSheeps();
+                    if (_previousPhase == EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_ARCANE)
+                    {
+                        _previousPhase = EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_FROST;
+                        _events.SetPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_FROST);
+                    }
+                    else if (_previousPhase == EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_FROST)
+                    {
+                        _previousPhase = EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_FIRE;
+                        _events.SetPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_FIRE);
+                        me->SetReactState(REACT_AGGRESSIVE);
+                        me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                        if (_EngageGroup(me))
+                            me->GetMotionMaster()->MoveChase(me->GetVictim(), 25.0f);
+                        _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FIRE_SUMMON, Seconds(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                        _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FIRE_FIREBALL, Seconds(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                        _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FIRE_SPIT, Seconds(7), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                        _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FIRE_FLAMESTRIKE, Seconds(10), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                    }
                     break;
                 default:
                     break;
@@ -1391,7 +1471,7 @@ private:
                 who->EngageWithTarget(vehicle);
         }
 
-        return me->IsInCombat();
+        return me->IsEngaged();
     }
 
     void _Summon(uint32 entry)
