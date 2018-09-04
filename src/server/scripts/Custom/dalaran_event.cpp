@@ -505,7 +505,7 @@ struct npc_minigob_escape_rhonin : public ScriptedAI
 
     void Reset() override
     {
-        _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_RHONIN_SEARCH_PLAYERS, Milliseconds(1));
+        //_events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_RHONIN_SEARCH_PLAYERS, Milliseconds(1)); TODO - further develop search and loop logic, current causes race conditions on the common container
     }
 
     bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
