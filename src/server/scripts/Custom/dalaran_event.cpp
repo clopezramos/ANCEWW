@@ -358,8 +358,7 @@ enum MinigobEscapeDataIds
 {
     DATA_MINIGOB_ESCAPE_COLDFLAME_GUID = 0,
     DATA_MINIGOB_ESCAPE_REMOVE_GROUP,
-    DATA_MINIGOB_ESCAPE_ADD_GROUP,
-    DATA_MINIGOB_ESCAPE_RESUME_FROST_COMBAT
+    DATA_MINIGOB_ESCAPE_ADD_GROUP
 };
 
 enum MinigobEscapeActionIds
@@ -720,8 +719,14 @@ private:
         for (auto itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
         {
             if (Player* member = itr->GetSource())
-                if (member->IsWithinDistInMap(me, searchDistance))
+            {
+                MinigobEscapePlayerInfo* info = member->_customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey);
+                if (info && member->IsWithinDistInMap(me, searchDistance))
+                {
                     member->SetPhaseMask(phaseMask, true);
+                    info->Status = MINIGOBESCAPE_PLAYERINFO_STATUS_EVENT;
+                }
+            }
         }
     }
 
@@ -732,13 +737,18 @@ private:
 
         auto itr = _encounters.find(group->GetGUID());
         if (itr != _encounters.end())
-            player->SetPhaseMask(itr->second, true);
+        {
+            if (MinigobEscapePlayerInfo* info = player->_customData.Get<MinigobEscapePlayerInfo>(minigobEscapeDataKey))
+            {
+                player->SetPhaseMask(itr->second, true);
+                info->Status = MINIGOBESCAPE_PLAYERINFO_STATUS_EVENT;
+            }
+        }
     }
 
     void EndEncounter(ObjectGuid const& groupGuid)
     {
-        if (_encounters.erase(groupGuid) == size_t(0))
-            return;
+        _encounters.erase(groupGuid);
 
         Group const* group = sGroupMgr->GetGroupByGUID(groupGuid.GetCounter());
         if (!group)
@@ -776,7 +786,7 @@ private:
             ResetPlayerPhaseMask(player);
 
         Talk(SAY_MINIGOB_ESCAPE_RHONIN_EVENT_OUT_0, player);
-        DoCast(player, SPELL_MINIGOB_ESCAPE_TELEPORT_OUT);
+        player->CastSpell(player, SPELL_MINIGOB_ESCAPE_TELEPORT_OUT, true);
     }
 
     float const searchDistance = 100.0f;
@@ -857,8 +867,8 @@ struct boss_minigob_escape : public ScriptedAI
                 _rhoninGUID = summon->GetGUID();
                 summon->SetWalk(true);
                 break;
-                default:
-                    break;
+            default:
+                break;
         }
     }
 
@@ -874,6 +884,16 @@ struct boss_minigob_escape : public ScriptedAI
             case NPC_MINIGOB_ESCAPE_MINIGOB_COPY:
                 if (_events.IsInPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_ARCANE))
                     _events.RescheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_ARCANE_SUMMON, Seconds(25), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                break;
+            case NPC_MINIGOB_ESCAPE_FROST_ELEMENTAL:
+                me->SetReactState(REACT_AGGRESSIVE);
+                me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                if (_EngageGroup(me))
+                    me->GetMotionMaster()->MoveChase(me->GetVictim(), 25.0f);
+                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_FROSTBOLT, Seconds(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_COLDFLAME, Seconds(15), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_FROSTBOLT_VOLLEY, Seconds(10), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
+                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_NOVA_0, Seconds(60), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
                 break;
             case NPC_MINIGOB_ESCAPE_FIRE_ELEMENTAL:
                 _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FIRE_SUMMON, Minutes(1) + Seconds(30), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
@@ -909,25 +929,6 @@ struct boss_minigob_escape : public ScriptedAI
         }
 
         return ObjectGuid::Empty;
-    }
-
-    void SetData(uint32 id, uint32 /*value*/) override
-    {
-        switch (id)
-        {
-            case DATA_MINIGOB_ESCAPE_RESUME_FROST_COMBAT:
-                me->SetReactState(REACT_AGGRESSIVE);
-                me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
-                if (_EngageGroup(me))
-                    me->GetMotionMaster()->MoveChase(me->GetVictim(), 25.0f);
-                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_FROSTBOLT, Seconds(1), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
-                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_COLDFLAME, Seconds(15), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
-                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_FROSTBOLT_VOLLEY, Seconds(10), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
-                _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_FROST_NOVA_0, Seconds(60), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_COMBAT);
-                break;
-            default:
-                break;
-        }
     }
 
     void DoAction(int32 action) override
@@ -1004,7 +1005,7 @@ struct boss_minigob_escape : public ScriptedAI
 
     void JustEngagedWith(Unit* /*who*/) override
     {
-        if (_events.GetPhaseMask() == EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_INTRO)
+        if (_events.IsInPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_INTRO))
         {
             _previousPhase = EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_ARCANE;
             _events.SetPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_ARCANE);
@@ -1081,7 +1082,7 @@ struct boss_minigob_escape : public ScriptedAI
 
         _events.Update(diff);
 
-        if (me->HasUnitState(UNIT_STATE_CASTING))
+        if (me->HasUnitState(UNIT_STATE_CASTING) && !(_events.GetPhaseMask() == 0 || _events.IsInPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_INTRO) || _events.IsInPhase(EVENT_PHASE_MINIGOB_ESCAPE_MINIGOB_WIPE)))
             return;
 
         while (uint32 eventId = _events.ExecuteEvent())
@@ -1233,6 +1234,7 @@ struct boss_minigob_escape : public ScriptedAI
                     _events.ScheduleEvent(EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_ENGAGE, Seconds(3), EVENT_GROUP_MINIGOB_ESCAPE_MINIGOB_INTRO);
                     break;
                 case EVENT_MINIGOB_ESCAPE_MINIGOB_INTRO_ENGAGE:
+                    me->InterruptNonMeleeSpells(true);
                     me->SetReactState(REACT_AGGRESSIVE);
                     me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
                     me->SetImmuneToAll(false);
@@ -2172,6 +2174,8 @@ class spell_minigob_escape_teleport_out : public SpellScript
         if (Unit* originalCaster = GetOriginalCaster())
         {
             if (originalCaster->GetEntry() == NPC_MINIGOB_ESCAPE_RHONIN_EVENT)
+                return true;
+            if (originalCaster->GetTypeId() == TYPEID_PLAYER)
                 return true;
         }
 

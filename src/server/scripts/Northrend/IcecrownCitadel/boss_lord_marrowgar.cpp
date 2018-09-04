@@ -430,7 +430,7 @@ class npc_coldflame : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return GetIcecrownCitadelAI<npc_coldflameAI>(creature);
+            return new npc_coldflameAI(creature);
         }
 };
 
